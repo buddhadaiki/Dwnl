@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dwnl</title>
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="src/popup.js"></script>
+</head>
+<body>
+  <main id="app">
+    <header class="header">
+      <div class="brand"><span class="brand-icon" aria-hidden="true">↧</span><span>Dwnl<span class="brand-dot">.</span></span></div>
+      <span id="connection" class="connection">Conectando</span>
+    </header>
+    <section class="intro"><p class="eyebrow">SEU ARQUIVO, NO SEU COMPUTADOR</p><h1>Do link para a sua pasta.</h1><p>Escolha o vídeo ou leve só o áudio.</p></section>
+    <section id="onboarding" class="notice" hidden>
+      <h2 id="onboarding-title">Conecte o auxiliar Dwnl</h2>
+      <p id="onboarding-detail"></p>
+      <p id="local-installer">Abra o instalador fornecido no pacote local do Dwnl. Depois, tente conectar novamente.</p>
+      <button id="install" type="button" hidden>Baixar instalador do Dwnl</button>
+      <button id="reconnect" type="button" class="secondary">Tentar conectar</button>
+    </section>
+    <div id="network-notice" class="notice" hidden>Extração de sites bloqueada nesta versão: a proteção de rede do motor ainda precisa ser validada. Nenhuma plataforma foi confirmada por este protótipo.</div>
+    <div id="error" class="notice error" role="alert" hidden></div>
+    <form id="source-form" class="source-card">
+      <div class="section-label"><span class="step">01</span><label for="url">Link do conteúdo</label></div>
+      <input id="url" name="url" type="url" placeholder="Cole um link público aqui" autocomplete="off" spellcheck="false" required>
+      <div class="source-actions"><button id="current-tab" type="button" class="secondary">↗ Usar aba atual</button><button id="analyze" type="submit" class="primary">Analisar <span aria-hidden="true">→</span></button></div>
+      <p class="hint">YouTube · Instagram · TikTok · X <span>Suporte sujeito ao conteúdo.</span></p>
+    </form>
+    <section id="selection" class="selection-card" hidden>
+      <div class="section-label"><span class="step">02</span><h2>Escolha sua saída</h2></div>
+      <label id="item-label" for="item">Vídeo do post</label><select id="item" aria-labelledby="item-label"></select>
+      <h3 id="media-title"></h3><p id="media-detail" class="muted"></p>
+      <div class="mode-switch" role="group" aria-label="Tipo de arquivo"><button id="mode-video" type="button" aria-pressed="true">Vídeo</button><button id="mode-mp3" type="button" aria-pressed="false">Áudio MP3</button></div>
+      <p id="mp3-reason" class="hint" hidden></p>
+      <div id="video-settings"><label for="quality">Qualidade disponível</label><select id="quality"></select><p id="quality-note" class="hint"></p><button id="more-formats" type="button" class="text-button" hidden>Ver mais formatos</button></div>
+      <div id="mp3-settings" hidden><label for="bitrate">Taxa de saída MP3</label><select id="bitrate"><option value="128">128 kbps</option><option value="192" selected>192 kbps · padrão</option><option value="320">320 kbps</option></select><p class="hint">A taxa de saída não recupera fidelidade ausente na fonte.</p></div>
+      <div class="destination"><div><span class="eyebrow">SALVAR EM</span><p id="destination">Downloads/Dwnl</p></div><button id="choose-destination" type="button" class="text-button">Alterar pasta</button></div>
+      <button id="start" type="button" class="primary start" disabled>Salvar vídeo <span aria-hidden="true">↧</span></button>
+    </section>
+    <section id="job" class="job-card" aria-live="polite" hidden>
+      <div class="job-heading"><h2 id="job-state"></h2><span id="job-percent"></span></div>
+      <progress id="job-progress" max="100" aria-label="Progresso da etapa"></progress>
+      <p id="job-detail" class="muted"></p><p id="completed-file" class="completed-file" hidden></p>
+      <button id="cancel" type="button" class="secondary">Cancelar tarefa</button><button id="verify-job" type="button" class="text-button" hidden>Verificar tarefa</button>
+    </section>
+    <details id="history"><summary>Histórico local <span id="history-count">0</span></summary><ol id="history-list"></ol><button id="clear-history" type="button" class="text-button">Limpar histórico</button><p class="hint">Limpar o histórico preserva os arquivos salvos.</p></details>
+    <footer><p>As URLs são tratadas pelo auxiliar local, sem uma conta Dwnl.</p><p>Fechar este painel mantém a tarefa. Fechar o Chrome ou perder a conexão pode interrompê-la.</p></footer>
+  </main>
+</body>
+</html>

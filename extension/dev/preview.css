@@ -1,0 +1,8 @@
+body { width: 100%; max-height: none; min-height: 100vh; background: #e8ece3; }
+#preview-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 15px 22px; background: #252b28; color: #edf2e5; font-size: 12px; }
+#preview-toolbar strong { color: #d7f484; font-size: 10px; letter-spacing: 1px; }
+#preview-toolbar label { display: inline; margin: 0 0 0 auto; }
+#preview-toolbar select { width: 225px; padding: 9px; background: #fff; }
+#preview-toolbar button { padding: 9px 12px; background: #d7f484; }
+#preview-popup { width: 420px; max-width: 100%; margin: 30px auto; background: #f5f6f1; border-radius: 15px; box-shadow: 0 12px 55px #253b2420; overflow: hidden; }
+#preview-popup main { min-height: 500px; }

@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Dwnl",
+  "version": "0.1.0",
+  "description": "Salve vídeos públicos autorizados ou áudio MP3 com o auxiliar local Dwnl.",
+  "permissions": ["nativeMessaging", "storage", "activeTab"],
+  "background": { "service_worker": "src/service-worker.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "Dwnl" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'" }
+}
