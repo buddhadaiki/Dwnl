@@ -149,6 +149,12 @@ func (s *Session) Handle(ctx context.Context, req contracts.Request) contracts.R
 		if err != nil {
 			return s.failure(req, contracts.DestinationError)
 		}
+		if !result.Canceled {
+			path, err := s.options.Destinations.Resolve(result.DestinationID)
+			if err != nil || s.options.Store.SaveDestinationPreference(path) != nil {
+				return s.failure(req, contracts.DestinationError)
+			}
+		}
 		return s.success(req, result)
 	case contracts.OperationStart:
 		return s.start(req, fingerprint)
@@ -405,6 +411,12 @@ func (s *Session) start(req contracts.Request, fingerprint string) contracts.Res
 		}
 	}
 	plan := contracts.DownloadPlan{RequestID: req.RequestID, HostSessionID: s.ID(), JobID: jobID, Analysis: analysis, Item: item, Mode: payload.Mode, MP3BitrateKbps: payload.BitrateKbps, DestinationID: payload.DestinationID, DestinationPath: destination, WorkDir: workDir}
+	plan.PrepareFinalization = func(proof contracts.PreparedFinalization) error {
+		if !hostwin.IsWithin(destination, proof.File.Path) {
+			return safeError(contracts.DestinationError)
+		}
+		return s.options.Store.PrepareFinalization(s.ID(), jobID, proof)
+	}
 	if payload.Mode == contracts.ModeVideo {
 		for _, choice := range item.VideoChoices {
 			if choice.OptionID == payload.VideoOptionID {
@@ -443,6 +455,12 @@ func (s *Session) execute(ctx context.Context, j *job, plan contracts.DownloadPl
 	snapshot.CompletedFile = nil
 	snapshot.Error = nil
 	switch {
+	case err == nil:
+		// Execute returned a final file and the host independently verified it.
+		// That physical completion wins a late cancel or disconnect; cleanup of
+		// owned temporary files is best effort and cannot undo the final result.
+		snapshot.State = contracts.StateCompleted
+		snapshot.CompletedFile = &completed
 	case !terminationConfirmed:
 		snapshot.State = contracts.StateFailed
 		snapshot.Error = safeError(contracts.CancelFailed)
@@ -455,15 +473,9 @@ func (s *Session) execute(ctx context.Context, j *job, plan contracts.DownloadPl
 		} else {
 			snapshot.State = contracts.StateCanceled
 		}
-	case err != nil:
+	default:
 		snapshot.State = contracts.StateFailed
 		snapshot.Error = safeError(errorCode(err))
-	case cleanupErr != nil:
-		snapshot.State = contracts.StateFailed
-		snapshot.Error = safeError(contracts.InternalError)
-	default:
-		snapshot.State = contracts.StateCompleted
-		snapshot.CompletedFile = &completed
 	}
 	if saveErr := s.options.Store.Put(storage.Record{Fingerprint: j.fingerprint, TerminalConfirmed: terminationConfirmed, Snapshot: snapshot}); saveErr != nil {
 		snapshot.State = contracts.StateFailed
@@ -580,7 +592,23 @@ func (s *Session) reconcile(req contracts.Request) contracts.Response {
 	}
 	snapshot := cloneSnapshot(record.Snapshot)
 	confirmed := record.TerminalConfirmed
-	if snapshot.State == contracts.StateCompleted {
+	if record.PreparedFinalization != nil {
+		completed, prepared, err := s.options.Store.PreparedCompletion(*record)
+		if err != nil {
+			return s.failure(req, contracts.InternalError)
+		}
+		if prepared {
+			snapshot.State = contracts.StateCompleted
+			snapshot.Progress = nil
+			snapshot.Error = nil
+			snapshot.CompletedFile = &completed
+			confirmed = true
+		} else if snapshot.State == contracts.StateCompleted {
+			// An identity-bound record may never fall back to equal bytes
+			// in a replacement file after its physical proof failed.
+			confirmed = false
+		}
+	} else if snapshot.State == contracts.StateCompleted {
 		confirmed = confirmed && snapshot.CompletedFile != nil && storage.VerifyCompleted(*snapshot.CompletedFile) == nil
 	}
 	if confirmed {

@@ -50,6 +50,16 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	preferredPath, preferenceErr := store.PreferredDestination(defaultPath)
+	if preferenceErr != nil {
+		// Keep the fallback visible in the handshake; private corruption is
+		// reported without leaking saved paths or resuming previous work.
+		fmt.Fprintln(os.Stderr, "Dwnl is using the default destination because the saved preference could not be validated")
+		if preferredPath == "" {
+			return preferenceErr
+		}
+	}
+	defaultPath = preferredPath
 	destinations, err := storage.NewDestinations(defaultPath, nil)
 	if err != nil {
 		return err

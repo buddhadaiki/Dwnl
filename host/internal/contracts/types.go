@@ -281,16 +281,30 @@ func ResultAs[T any](response Response) (T, error) {
 }
 
 // DownloadPlan resolves selection and host destinations; this is never wire input.
+// PhysicalIdentity and PreparedFinalization belong to the private host journal,
+// never to browser requests or events. File IDs bind recovery to owned bytes.
+type PhysicalIdentity struct {
+	VolumeSerialNumber uint32 `json:"volumeSerialNumber"`
+	FileIndexHigh      uint32 `json:"fileIndexHigh"`
+	FileIndexLow       uint32 `json:"fileIndexLow"`
+}
+type PreparedFinalization struct {
+	File           CompletedFile    `json:"file"`
+	Identity       PhysicalIdentity `json:"identity"`
+	ParentIdentity PhysicalIdentity `json:"parentIdentity"`
+}
+
 type DownloadPlan struct {
-	RequestID       string
-	HostSessionID   string
-	JobID           string
-	Analysis        Analysis
-	Item            MediaItem
-	Mode            DownloadMode
-	VideoChoice     *VideoChoice
-	MP3BitrateKbps  int
-	DestinationID   string
-	DestinationPath string
-	WorkDir         string
+	RequestID           string
+	HostSessionID       string
+	JobID               string
+	Analysis            Analysis
+	Item                MediaItem
+	Mode                DownloadMode
+	VideoChoice         *VideoChoice
+	MP3BitrateKbps      int
+	DestinationID       string
+	DestinationPath     string
+	WorkDir             string
+	PrepareFinalization func(PreparedFinalization) error
 }

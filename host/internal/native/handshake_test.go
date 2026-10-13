@@ -43,7 +43,9 @@ func TestEofCancelsHandshakeDependencyProbe(t *testing.T) {
 	defer input.Close()
 	var output bytes.Buffer
 	result := make(chan error, 1)
-	go func() { result <- Serve(context.Background(), input, &output, session) }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { result <- Serve(ctx, input, &output, session) }()
 	request, _ := json.Marshal(contracts.Request{ProtocolVersion: 1, RequestID: "hello", Operation: contracts.OperationHandshake, Payload: json.RawMessage(`{"extensionVersion":"0.1.0"}`)})
 	if err := WriteFrame(writer, request); err != nil {
 		t.Fatal(err)
@@ -52,6 +54,10 @@ func TestEofCancelsHandshakeDependencyProbe(t *testing.T) {
 	case <-begun:
 	case <-time.After(5 * time.Second):
 		t.Fatal("dependency probe did not begin")
+	}
+	queued, _ := json.Marshal(contracts.Request{ProtocolVersion: 1, RequestID: "queued-status", HostSessionID: session.ID(), Operation: contracts.OperationStatus, Payload: json.RawMessage(`{}`)})
+	if err := WriteFrame(writer, queued); err != nil {
+		t.Fatal(err)
 	}
 	writer.Close()
 	select {

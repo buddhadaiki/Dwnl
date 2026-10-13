@@ -26,7 +26,7 @@ func (e *waitingAnalysisEngine) Analyze(ctx context.Context, url string) (contra
 func (e *waitingAnalysisEngine) Execute(context.Context, contracts.DownloadPlan, func(contracts.Progress)) (contracts.CompletedFile, error) {
 	panic("unexpected execution")
 }
-func TestEofCancelsInflightAnalysisBeforeServeReturns(t *testing.T) {
+func TestEofWithQueuedControlFrameCancelsInflightAnalysis(t *testing.T) {
 	base := t.TempDir()
 	store, err := storage.Open(filepath.Join(base, "state"))
 	if err != nil {
@@ -48,7 +48,9 @@ func TestEofCancelsInflightAnalysisBeforeServeReturns(t *testing.T) {
 	defer outputReader.Close()
 	defer output.Close()
 	result := make(chan error, 1)
-	go func() { result <- Serve(context.Background(), input, output, session) }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { result <- Serve(ctx, input, output, session) }()
 	send := func(request contracts.Request) {
 		b, _ := json.Marshal(request)
 		if err := WriteFrame(inputWriter, b); err != nil {
@@ -69,6 +71,9 @@ func TestEofCancelsInflightAnalysisBeforeServeReturns(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("analysis did not begin")
 	}
+	// The host reader must not block handing this request to the busy handler;
+	// otherwise the EOF immediately behind it is never observed.
+	send(contracts.Request{ProtocolVersion: 1, RequestID: "queued-status", HostSessionID: session.ID(), Operation: contracts.OperationStatus, Payload: json.RawMessage(`{}`)})
 	inputWriter.Close()
 	select {
 	case err := <-result:

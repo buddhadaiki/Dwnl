@@ -322,7 +322,7 @@ func TestReservedAndTraversalTitlesCannotEscapeDestination(t *testing.T) {
 	}
 	for _, title := range []string{"CON", "NUL .txt", "COM¹", `../../escaped`, `C:\\absolute\\name`, "....", ""} {
 		dir := t.TempDir()
-		result, err := finalize(context.Background(), source, dir, title, "mp4", "job")
+		result, err := finalize(context.Background(), source, dir, title, "mp4", "job", contracts.CompletedFile{}, nil)
 		if err != nil {
 			t.Fatalf("title %q: %v", title, err)
 		}
@@ -346,7 +346,7 @@ func TestDestinationNoOverwriteAndOwnedIntermediate(t *testing.T) {
 	if err := os.WriteFile(preexisting, []byte("preserve"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	done, err := finalize(context.Background(), source, dir, "Owned media", "mp4", "job")
+	done, err := finalize(context.Background(), source, dir, "Owned media", "mp4", "job", contracts.CompletedFile{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -467,7 +467,7 @@ func TestFinalizeCanceledDoesNotPublish(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(t.TempDir(), "source")
 	_ = os.WriteFile(source, []byte("bytes"), 0600)
-	_, err := finalize(ctx, source, dir, "Media", "mp4", "job")
+	_, err := finalize(ctx, source, dir, "Media", "mp4", "job", contracts.CompletedFile{}, nil)
 	if err != context.Canceled {
 		t.Fatalf("err=%v", err)
 	}
@@ -482,7 +482,7 @@ func TestFinalizeRequiresValidIntermediateJobIdentity(t *testing.T) {
 	if err := os.WriteFile(source, []byte("owned media"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := finalize(context.Background(), source, destination, "Media", "mp4", "../outside")
+	_, err := finalize(context.Background(), source, destination, "Media", "mp4", "../outside", contracts.CompletedFile{}, nil)
 	code(t, err, contracts.DestinationError)
 	files, _ := os.ReadDir(destination)
 	if len(files) != 0 {
@@ -523,7 +523,7 @@ func TestFinalizeCancellationCleansOwnedIntermediateOnly(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_, err := finalize(cancelOnIntermediateContext{Context: ctx, destination: destination, knownName: known, cancel: cancel}, source, destination, "Media", "mp4", "cleanup-job")
+	_, err := finalize(cancelOnIntermediateContext{Context: ctx, destination: destination, knownName: known, cancel: cancel}, source, destination, "Media", "mp4", "cleanup-job", contracts.CompletedFile{}, nil)
 	if err != context.Canceled {
 		t.Fatalf("cancellation after intermediate creation: %v", err)
 	}

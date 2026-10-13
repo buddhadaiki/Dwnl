@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"dwnl/host/internal/contracts"
+	"dwnl/host/internal/ports"
 	"dwnl/host/internal/storage"
 	"encoding/hex"
 	"encoding/json"
@@ -33,7 +34,7 @@ func (e *blockingEngine) Execute(ctx context.Context, p contracts.DownloadPlan, 
 	}
 	return contracts.CompletedFile{}, ctx.Err()
 }
-func newTestSession(t *testing.T, engine *blockingEngine, storeRoot string) *Session {
+func newTestSession(t *testing.T, engine ports.Engine, storeRoot string) *Session {
 	t.Helper()
 	s, err := storage.Open(storeRoot)
 	if err != nil {
@@ -310,4 +311,129 @@ func TestCorruptLedgerCannotPreventCancelingActiveTask(t *testing.T) {
 		t.Fatal("ledger failure left the active task running after cancel")
 	}
 	waitState(t, s, start.JobID, contracts.StateFailed)
+}
+
+type publishedBeforeReturnEngine struct {
+	blockingEngine
+	published   chan contracts.CompletedFile
+	allowReturn chan struct{}
+}
+
+func (e *publishedBeforeReturnEngine) Execute(_ context.Context, plan contracts.DownloadPlan, _ func(contracts.Progress)) (contracts.CompletedFile, error) {
+	// The slow/external engine boundary pauses only after its real final file is
+	// durable. The runtime must decide the resulting state from that proof.
+	data := []byte("verified completed output")
+	path := filepath.Join(plan.DestinationPath, "confirmed-"+plan.JobID+".mp3")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return contracts.CompletedFile{}, err
+	}
+	if _, err = file.Write(data); err != nil {
+		file.Close()
+		return contracts.CompletedFile{}, err
+	}
+	if err = file.Sync(); err != nil {
+		file.Close()
+		return contracts.CompletedFile{}, err
+	}
+	if err = file.Close(); err != nil {
+		return contracts.CompletedFile{}, err
+	}
+	hash := sha256.Sum256(data)
+	completed := contracts.CompletedFile{Path: path, Format: "mp3", SizeBytes: uint64(len(data)), SHA256: hex.EncodeToString(hash[:]), AudioCodec: "mp3", MP3BitrateKbps: 192}
+	e.published <- completed
+	<-e.allowReturn
+	return completed, nil
+}
+
+func TestConfirmedCompletionWinsLateCancelOrDisconnect(t *testing.T) {
+	for _, trigger := range []string{"cancel", "disconnect"} {
+		t.Run(trigger, func(t *testing.T) {
+			base := t.TempDir()
+			root := filepath.Join(base, "state")
+			engine := &publishedBeforeReturnEngine{published: make(chan contracts.CompletedFile, 1), allowReturn: make(chan struct{})}
+			session := newTestSession(t, engine, root)
+			var release sync.Once
+			t.Cleanup(func() { release.Do(func() { close(engine.allowReturn) }) })
+			response := session.Handle(context.Background(), analyzeStart(t, session, "confirmed-start"))
+			if response.Error != nil {
+				t.Fatal(response.Error)
+			}
+			start, err := contracts.ResultAs[contracts.StartResult](response)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var completed contracts.CompletedFile
+			select {
+			case completed = <-engine.published:
+			case <-time.After(5 * time.Second):
+				t.Fatal("engine did not publish its real final file")
+			}
+			if err := storage.VerifyCompleted(completed); err != nil {
+				t.Fatal(err)
+			}
+			var closed chan struct{}
+			if trigger == "cancel" {
+				response = session.Handle(context.Background(), request("late-cancel", session.ID(), contracts.OperationCancel, contracts.CancelPayload{JobID: start.JobID}))
+				if response.Error != nil {
+					t.Fatal(response.Error)
+				}
+				cancel, err := contracts.ResultAs[contracts.CancelResult](response)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if cancel.Snapshot.State != contracts.StateCanceling {
+					t.Fatalf("engine still paused, cancel state = %s", cancel.Snapshot.State)
+				}
+			} else {
+				closed = make(chan struct{})
+				go func() { session.Close(); close(closed) }()
+				// Wait for Close to cancel this session before allowing success to return.
+				select {
+				case <-session.context.Done():
+				case <-time.After(5 * time.Second):
+					t.Fatal("session close did not begin")
+				}
+			}
+			release.Do(func() { close(engine.allowReturn) })
+			session.wg.Wait()
+			if closed != nil {
+				select {
+				case <-closed:
+				case <-time.After(5 * time.Second):
+					t.Fatal("session close did not complete")
+				}
+			}
+			record, err := session.options.Store.Find(session.ID(), start.JobID, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if record == nil || record.Snapshot.State != contracts.StateCompleted || record.Snapshot.CompletedFile == nil || !record.TerminalConfirmed {
+				t.Fatalf("%s after physical publication lost confirmed completion: %+v", trigger, record)
+			}
+			if record.Snapshot.CompletedFile.Path != completed.Path {
+				t.Fatal("completion persisted a different final path")
+			}
+			if got, err := os.ReadFile(completed.Path); err != nil || string(got) != "verified completed output" {
+				t.Fatalf("final file was removed or changed: %q, %v", got, err)
+			}
+			if trigger == "cancel" {
+				response = session.Handle(context.Background(), request("status-completed", session.ID(), contracts.OperationStatus, contracts.StatusPayload{JobID: start.JobID}))
+				status, _ := contracts.ResultAs[contracts.StatusResult](response)
+				if status.Snapshot == nil || status.Snapshot.State != contracts.StateCompleted {
+					t.Fatal("live status does not preserve confirmed completion")
+				}
+				session.Close()
+			}
+			current := newTestSession(t, &blockingEngine{begun: make(chan struct{})}, root)
+			response = current.Handle(context.Background(), request("reconcile-completed", current.ID(), contracts.OperationReconcile, contracts.ReconcilePayload{PreviousHostSessionID: session.ID(), JobID: start.JobID}))
+			if response.Error != nil {
+				t.Fatal(response.Error)
+			}
+			reconciled, _ := contracts.ResultAs[contracts.ReconcileResult](response)
+			if reconciled.Outcome != "confirmed" || reconciled.Snapshot == nil || reconciled.Snapshot.State != contracts.StateCompleted || reconciled.Snapshot.CompletedFile == nil {
+				t.Fatalf("late %s completion did not reconcile: %+v", trigger, reconciled)
+			}
+		})
+	}
 }

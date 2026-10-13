@@ -20,10 +20,53 @@ import (
 var ErrCorrupt = errors.New("corrupt private ledger")
 
 type Record struct {
-	Fingerprint       string                `json:"fingerprint"`
-	TerminalConfirmed bool                  `json:"terminalConfirmed"`
-	Snapshot          contracts.JobSnapshot `json:"snapshot"`
+	Fingerprint          string                          `json:"fingerprint"`
+	TerminalConfirmed    bool                            `json:"terminalConfirmed"`
+	Snapshot             contracts.JobSnapshot           `json:"snapshot"`
+	PreparedFinalization *contracts.PreparedFinalization `json:"preparedFinalization,omitempty"`
 }
+
+func (r *Record) UnmarshalJSON(data []byte) error {
+	type recordJSON Record
+	var decoded recordJSON
+	if strictJSON(data, &decoded) != nil {
+		return ErrCorrupt
+	}
+	fields, err := requiredPrivateFields(data, "fingerprint terminalConfirmed snapshot")
+	if err != nil {
+		return err
+	}
+	if _, err = requiredPrivateFields(fields["snapshot"], "hostSessionId jobId startRequestId sequence state"); err != nil {
+		return err
+	}
+	if raw, present := fields["preparedFinalization"]; present {
+		proof, err := requiredPrivateFields(raw, "file identity parentIdentity")
+		if err != nil || decoded.PreparedFinalization == nil {
+			return ErrCorrupt
+		}
+		for _, field := range []string{"identity", "parentIdentity"} {
+			if _, err = requiredPrivateFields(proof[field], "volumeSerialNumber fileIndexHigh fileIndexLow"); err != nil {
+				return err
+			}
+		}
+	}
+	*r = Record(decoded)
+	return nil
+}
+
+func requiredPrivateFields(data []byte, required string) (map[string]json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) != nil || fields == nil {
+		return nil, ErrCorrupt
+	}
+	for _, key := range strings.Fields(required) {
+		if raw, present := fields[key]; !present || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return nil, ErrCorrupt
+		}
+	}
+	return fields, nil
+}
+
 type Store struct {
 	root  string
 	owner string
@@ -86,6 +129,17 @@ func (s *Store) Put(r Record) error {
 		updated := false
 		for i, old := range l.Records {
 			if old.Snapshot.HostSessionID == r.Snapshot.HostSessionID && old.Snapshot.JobID == r.Snapshot.JobID {
+				// Progress and terminal snapshots do not carry the private proof.
+				// Only PrepareFinalization may replace an existing preparation.
+				if old.PreparedFinalization != nil {
+					if r.PreparedFinalization != nil && *r.PreparedFinalization != *old.PreparedFinalization {
+						return ErrCorrupt
+					}
+					r.PreparedFinalization = old.PreparedFinalization
+				}
+				if err := validateRecord(r); err != nil {
+					return err
+				}
 				l.Records[i] = r
 				updated = true
 				break
@@ -215,7 +269,7 @@ func strictJSON(b []byte, out any) error {
 	return nil
 }
 func validateRecord(r Record) error {
-	if r.Fingerprint == "" || len(r.Fingerprint) > 128 {
+	if !privateText(r.Fingerprint, 128) {
 		return ErrCorrupt
 	}
 	state := r.Snapshot.State
@@ -223,10 +277,32 @@ func validateRecord(r Record) error {
 	if r.TerminalConfirmed && !terminal {
 		return ErrCorrupt
 	}
-	result, _ := json.Marshal(contracts.StatusResult{Snapshot: &r.Snapshot})
-	b, _ := json.Marshal(contracts.Response{ProtocolVersion: 1, Kind: "response", RequestID: "ledger-check", HostSessionID: r.Snapshot.HostSessionID, Operation: contracts.OperationStatus, Result: result})
-	_, err := contracts.DecodeMessage(b)
+	if err := validatePrivateSnapshot(r.Snapshot); err != nil {
+		return ErrCorrupt
+	}
+	if r.PreparedFinalization != nil {
+		if validatePreparation(*r.PreparedFinalization) != nil {
+			return ErrCorrupt
+		}
+		if r.Snapshot.CompletedFile != nil && *r.Snapshot.CompletedFile != r.PreparedFinalization.File {
+			return ErrCorrupt
+		}
+	}
+	return nil
+}
+
+// Validate the actual snapshot using its existing protocol bounds and codes;
+// private preparation fields never enter the browser protocol validator.
+func validatePrivateSnapshot(snapshot contracts.JobSnapshot) error {
+	result, err := json.Marshal(contracts.StatusResult{Snapshot: &snapshot})
 	if err != nil {
+		return ErrCorrupt
+	}
+	b, err := json.Marshal(contracts.Response{ProtocolVersion: 1, Kind: "response", RequestID: "ledger-check", HostSessionID: snapshot.HostSessionID, Operation: contracts.OperationStatus, Result: result})
+	if err != nil {
+		return ErrCorrupt
+	}
+	if _, err = contracts.DecodeMessage(b); err != nil {
 		return ErrCorrupt
 	}
 	return nil

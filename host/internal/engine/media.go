@@ -404,7 +404,17 @@ func (e *Engine) Execute(ctx context.Context, plan contracts.DownloadPlan, emit 
 	if emit != nil {
 		emit(contracts.Progress{Stage: contracts.StateSaving})
 	}
-	result, err := finalize(ctx, output, plan.DestinationPath, stored.analysis.Items[0].Title, format, plan.JobID)
+	metadata := contracts.CompletedFile{}
+	if v := proof.stream("video"); v != nil {
+		metadata.VideoCodec = v.CodecName
+	}
+	if a := proof.stream("audio"); a != nil {
+		metadata.AudioCodec = a.CodecName
+	}
+	if choice == nil {
+		metadata.MP3BitrateKbps = plan.MP3BitrateKbps
+	}
+	result, err := finalize(ctx, output, plan.DestinationPath, stored.analysis.Items[0].Title, format, plan.JobID, metadata, plan.PrepareFinalization)
 	if err != nil {
 		return empty, err
 	}
@@ -522,7 +532,7 @@ func sanitizeTitle(title string) string {
 
 // Always copy into an exclusive destination intermediate before publication.
 // This also handles another volume without ever exposing an incomplete final.
-func finalize(ctx context.Context, source, destination, title, format, jobID string) (contracts.CompletedFile, error) {
+func finalize(ctx context.Context, source, destination, title, format, jobID string, metadata contracts.CompletedFile, prepare func(contracts.PreparedFinalization) error) (contracts.CompletedFile, error) {
 	var empty contracts.CompletedFile
 	if err := ctx.Err(); err != nil {
 		return empty, err
@@ -549,7 +559,6 @@ func finalize(ctx context.Context, source, destination, title, format, jobID str
 	if err != nil {
 		return empty, fileError(err)
 	}
-	partPath := owned.Path
 	published := false
 	defer func() {
 		_ = part.Close()
@@ -595,28 +604,56 @@ func finalize(ctx context.Context, source, destination, title, format, jobID str
 		if err := ctx.Err(); err != nil {
 			return empty, err
 		}
-		if err := publishNoReplace(partPath, finalPath); err != nil {
+		candidate := metadata
+		candidate.Path, candidate.Format = finalPath, format
+		candidate.SizeBytes, candidate.SHA256 = uint64(size), hex.EncodeToString(digest.Sum(nil))
+		if prepare != nil {
+			proof := contracts.PreparedFinalization{File: candidate, Identity: contracts.PhysicalIdentity(owned.Identity), ParentIdentity: contracts.PhysicalIdentity(owned.ParentIdentity)}
+			if err := prepare(proof); err != nil {
+				return empty, protocolError(contracts.DestinationError, "The final media record could not be saved.")
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			return empty, err
+		}
+		if err := owned.Publish(finalPath); err != nil {
 			if errors.Is(err, os.ErrExist) {
 				continue
 			}
 			return empty, fileError(err)
 		}
 		published = true
-		info, err := os.Lstat(finalPath)
-		if err != nil || !info.Mode().IsRegular() || hasReparsePoint(finalPath) || !os.SameFile(info, partInfo) || info.Size() != size {
-			return empty, protocolError(contracts.InvalidOutput, "The final media file could not be physically verified.")
+		finalOwned := owned
+		finalOwned.Path = finalPath
+		result, err := verifyPublished(ctx, finalOwned, partInfo, size, candidate.SHA256, format)
+		if err != nil {
+			return empty, err
 		}
-		// Publication won the cancellation race. Verify the actual final bytes
-		// without turning a physically committed file into a canceled outcome.
-		physical, err := proveSource(context.WithoutCancel(ctx), finalPath)
-		if err != nil || physical.hash != hex.EncodeToString(digest.Sum(nil)) || !os.SameFile(physical.info, partInfo) {
-			// The same intermediate identity remains valid after publication.
-			finalOwned := owned
-			finalOwned.Path = finalPath
-			_ = finalOwned.Cleanup()
-			return empty, protocolError(contracts.InvalidOutput, "The final media hash could not be verified.")
-		}
-		return contracts.CompletedFile{Path: finalPath, Format: format, SizeBytes: uint64(size), SHA256: hex.EncodeToString(digest.Sum(nil))}, nil
+		result.VideoCodec, result.AudioCodec, result.MP3BitrateKbps = candidate.VideoCodec, candidate.AudioCodec, candidate.MP3BitrateKbps
+		return result, nil
 	}
 	return empty, protocolError(contracts.DestinationError, "The destination contains too many files with this name.")
+}
+
+// verifyPublished owns physical proof and exact cleanup after the rename.
+func verifyPublished(ctx context.Context, owned storage.OwnedIntermediate, partInfo os.FileInfo, size int64, wantHash, format string) (contracts.CompletedFile, error) {
+	var empty contracts.CompletedFile
+	verified := false
+	defer func() {
+		if !verified {
+			_ = owned.Cleanup()
+		}
+	}()
+	info, err := os.Lstat(owned.Path)
+	if err != nil || !info.Mode().IsRegular() || hasReparsePoint(owned.Path) || !os.SameFile(info, partInfo) || info.Size() != size {
+		return empty, protocolError(contracts.InvalidOutput, "The final media file could not be physically verified.")
+	}
+	// Publication won the cancellation race. Verify the actual final bytes
+	// without turning a physically committed file into a canceled outcome.
+	physical, err := proveSource(context.WithoutCancel(ctx), owned.Path)
+	if err != nil || physical.hash != wantHash || !os.SameFile(physical.info, partInfo) {
+		return empty, protocolError(contracts.InvalidOutput, "The final media hash could not be verified.")
+	}
+	verified = true
+	return contracts.CompletedFile{Path: owned.Path, Format: format, SizeBytes: uint64(size), SHA256: wantHash}, nil
 }
