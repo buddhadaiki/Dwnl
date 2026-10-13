@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ChromeNativeClient, ExtensionController } from '../src/controller.js';
 import type { BrowserPort } from '../src/browser.js';
 import type { Request } from '../src/protocol.js';
-import { job, handshake, response } from './fixtures.js';
+import { startPayload } from '../src/state.js';
+import { analysis, job, handshake, response, startFailure } from './fixtures.js';
 
 function endpoint() {
   const messages = new Set<(message: unknown) => void>();
@@ -143,5 +144,38 @@ describe('popup native transport and worker ownership', () => {
     expect(worker.state.job?.completedFile?.path).toBe('Downloads/Dwnl/new.mp3');
     expect(native.sent.at(-1)).toMatchObject({ operation: 'reconcile', payload: { previousHostSessionId: 'session-old', startRequestId: 'uncertain-new' } });
     expect(native.sent.some(request => request.operation === 'start')).toBe(false);
+  });
+  it.each([false, true])('a valid typed start rejection recovers controls and preserves prior cache uncertainty (cached=%s)', async cached => {
+    const native = endpoint(); const previous = job({ hostSessionId: 'session-old', jobId: 'old-job', startRequestId: 'old-start', state: 'interrupted' });
+    native.route(request => {
+      if (request.operation === 'handshake') native.receive(response('handshake', handshake, request.requestId));
+      if (request.operation === 'status') native.receive(response('status', { snapshot: null }, request.requestId));
+      if (request.operation === 'reconcile') native.receive(response('reconcile', { previousHostSessionId: 'session-old', outcome: 'unconfirmed', snapshot: previous }, request.requestId));
+      if (request.operation === 'analyze') native.receive(response('analyze', analysis(), request.requestId));
+      if (request.operation === 'start') native.receive(startFailure('DESTINATION_ERROR', request.requestId));
+    });
+    const worker = new ExtensionController(native.client, { load: async () => cached ? { version: 1, job: previous, history: [] } : undefined, save: async () => {} }, '0.1.0');
+    await worker.connect(); await worker.request('analyze', { url: 'https://www.youtube.com/watch?v=public' }, 'analyze-valid');
+    const payload = { analysisId: 'analysis-a', itemId: 'item-a', mode: 'video' as const, videoOptionId: 'mp41080', destinationId: 'destination-a' };
+    const result = await worker.request('start', payload, 'start-rejected');
+    expect(result.error?.code).toBe('DESTINATION_ERROR');
+    expect(worker.state.pendingStartRequestId).toBeUndefined(); expect(worker.state.pendingStartHostSessionId).toBeUndefined();
+    expect(worker.state.confirmation).toBe(cached ? 'unconfirmed' : 'confirmed');
+    expect(startPayload(worker.state)).toEqual(payload);
+    if (cached) expect(worker.state.job).toEqual(previous);
+    expect(native.sent.filter(request => request.operation === 'start')).toHaveLength(1);
+  });
+  it('BUSY start rejection reads current job status without restarting and exposes that active task', async () => {
+    const native = endpoint(); let rejected = false;
+    native.route(request => {
+      if (request.operation === 'handshake') native.receive(response('handshake', handshake, request.requestId));
+      if (request.operation === 'status') native.receive(response('status', { snapshot: rejected ? job({ jobId: 'existing-job', startRequestId: 'existing-start' }) : null }, request.requestId));
+      if (request.operation === 'start') { rejected = true; native.receive(startFailure('BUSY', request.requestId)); }
+    });
+    const worker = new ExtensionController(native.client, { load: async () => undefined, save: async () => {} }, '0.1.0'); await worker.connect();
+    await worker.request('start', { analysisId: 'analysis-a', itemId: 'item-a', mode: 'mp3', bitrateKbps: 192, destinationId: 'destination-a' }, 'rejected-busy');
+    expect(worker.state.job?.jobId).toBe('existing-job'); expect(worker.state.confirmation).toBe('confirmed');
+    expect(native.sent.at(-1)).toMatchObject({ operation: 'status', payload: {} });
+    expect(native.sent.filter(request => request.operation === 'start')).toHaveLength(1);
   });
 });

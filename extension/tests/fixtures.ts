@@ -1,4 +1,4 @@
-import type { Analysis, HandshakeResult, JobSnapshot, Operation, Response, ResultByOperation, VideoChoice } from '../src/protocol.js';
+import type { Analysis, HandshakeResult, JobSnapshot, Operation, ProtocolError, Response, ResultByOperation, VideoChoice } from '../src/protocol.js';
 
 export const choices: VideoChoice[] = [
   { optionId: 'webm1080', container: 'webm', height: 1080, width: 1920, videoCodec: 'vp9', audioCodec: 'opus', hasAudio: true, sizeEstimated: false },
@@ -21,4 +21,7 @@ export function response<O extends Operation>(operation: O, result: ResultByOper
 }
 export function job(overrides: Partial<JobSnapshot> = {}): JobSnapshot {
   return { hostSessionId: 'session-a', jobId: 'job-a', startRequestId: 'req-start', sequence: 1, state: 'downloading', ...overrides };
+}
+export function startFailure(code: ProtocolError['code'], requestId: string): Response {
+  return { protocolVersion: 1, kind: 'response', hostSessionId: 'session-a', operation: 'start', requestId, error: { code, message: code, retryable: true } };
 }

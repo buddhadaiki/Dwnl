@@ -1,5 +1,5 @@
 import { decodeMessage, decodeRequest, ProtocolDecodeError, type ErrorCode, type JobState, type MP3Bitrate, type NativeClient, type Operation, type PayloadByOperation, type Response, type VideoChoice } from './protocol.js';
-import { createInitialState, isTerminal, reduceState, selectItem, startPayload, type AppState } from './state.js';
+import { createInitialState, isTerminal, markStartPending, reduceState, selectItem, startPayload, type AppState } from './state.js';
 import { NativeTransportError, requestId } from './controller.js';
 import { browserAPI } from './browser.js';
 import { PopupNativeClient } from './popup-client.js';
@@ -64,7 +64,7 @@ export function mountPopup(document: Document, options: PopupOptions): { ready: 
     hide('install', !installerAvailable); disable('install', !!pending); disable('reconnect', !!pending);
     hide('network-notice', !networkBlocked);
     hide('error', !state.error); text('error', state.error ? errorLabels[state.error.code] : '');
-    disable('current-tab', pending === 'tab');
+    disable('current-tab', !!pending);
     disable('analyze', !connected || !!pending || active || networkBlocked || state.confirmation === 'checking');
     text('analyze', pending === 'analyze' ? 'Analisando…' : 'Analisar →');
     hide('selection', !item);
@@ -136,7 +136,7 @@ export function mountPopup(document: Document, options: PopupOptions): { ready: 
     render();
   }));
   listen('current-tab', 'click', async () => {
-    if (pending === 'tab') return; pending = 'tab'; render();
+    if (pending) return; pending = 'tab'; render();
     try { const url = await options.currentTab(); if (!url) throw new ProtocolDecodeError('INVALID_MESSAGE', 'No current tab URL'); el<HTMLInputElement>('url').value = url; el<HTMLInputElement>('url').focus(); }
     catch (error) { applyFailure(error); } finally { pending = undefined; render(); }
   });
@@ -154,7 +154,7 @@ export function mountPopup(document: Document, options: PopupOptions): { ready: 
   listen('bitrate', 'change', () => { const bitrate = Number(el<HTMLSelectElement>('bitrate').value); if ([128, 192, 320].includes(bitrate)) state = { ...state, bitrateKbps: bitrate as MP3Bitrate }; render(); });
   listen('choose-destination', 'click', async () => { if (!el<HTMLButtonElement>('choose-destination').disabled) await request('chooseDestination', { userGesture: true }); });
   listen('more-formats', 'click', async () => { const item = state.analysis?.items.find(value => value.itemId === state.selectedItemId); if (!state.analysis || !item?.formatsCursor || pending) return; await request('listFormats', { analysisId: state.analysis.analysisId, itemId: item.itemId, cursor: item.formatsCursor }); });
-  listen('start', 'click', async () => { const payload = startPayload(state); if (!payload || pending || el<HTMLButtonElement>('start').disabled) return; const id = requestId(); state = { ...state, pendingStartRequestId: id, pendingStartHostSessionId: state.hostSessionId, confirmation: 'checking' }; await request('start', payload, id); });
+  listen('start', 'click', async () => { const payload = startPayload(state); if (!payload || pending || el<HTMLButtonElement>('start').disabled) return; const id = requestId(); state = markStartPending(state, id); await request('start', payload, id); });
   listen('cancel', 'click', async () => { if (!state.job || pending || el<HTMLButtonElement>('cancel').disabled) return; await request('cancel', { jobId: state.job.jobId }); });
   async function reconnect(): Promise<void> {
     if (pending) return; pending = 'reconnect'; render();

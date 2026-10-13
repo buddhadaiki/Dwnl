@@ -1,6 +1,6 @@
 import { decodeMessage, decodeRequest, HOST_NAME, ProtocolDecodeError, type NativeClient, type Operation, type PayloadByOperation, type Response, type JobEvent } from './protocol.js';
 import type { BrowserPort } from './browser.js';
-import { createInitialState, isTerminal, reduceState, restoreCache, serializeCache, type AppState, type ConnectionState } from './state.js';
+import { createInitialState, isTerminal, markStartPending, reduceState, restoreCache, serializeCache, type AppState, type ConnectionState } from './state.js';
 export class NativeTransportError extends Error { constructor(public readonly reason: ConnectionState | 'timeout', message = reason) { super(message); } }
 export class ChromeNativeClient implements NativeClient {
   private port?: BrowserPort;
@@ -117,12 +117,15 @@ export class ExtensionController {
     if (operation === 'start') {
       if (this.state.pendingStartRequestId && this.state.pendingStartRequestId !== id || this.state.job && !isTerminal(this.state.job.state) && this.state.job.startRequestId !== id) throw new ProtocolDecodeError('BUSY', 'A task is already active');
       if (this.state.confirmation === 'checking' && this.state.pendingStartRequestId !== id) throw new ProtocolDecodeError('BUSY', 'Previous task must be confirmed first');
-      if (!replay) { this.state = { ...this.state, pendingStartRequestId: id, pendingStartHostSessionId: this.state.hostSessionId, confirmation: 'checking', error: undefined }; this.publish(); }
+      if (!replay) { this.state = markStartPending(this.state, id); this.publish(); }
     }
     try {
       const response = await this.native.request(operation, payload, id);
       this.state = reduceState(this.state, response); this.publish();
       if (response.operation === 'start' && response.result && (replay || isTerminal(response.result.state))) await this.native.request('status', { jobId: response.result.jobId }, requestId());
+      if (response.operation === 'start' && response.error?.code === 'BUSY') {
+        try { await this.native.request('status', {}, requestId()); } catch (error) { this.transportFailure(error); }
+      }
       return response;
     } catch (error) {
       if (operation === 'start' && error instanceof NativeTransportError) {
@@ -132,7 +135,7 @@ export class ExtensionController {
             const snapshot = status.result.snapshot;
             return { protocolVersion: 1, kind: 'response', hostSessionId: status.hostSessionId, operation: 'start', requestId: id, result: { jobId: snapshot.jobId, startRequestId: id, sequence: snapshot.sequence, state: snapshot.state } };
           }
-          if (status.operation === 'status' && status.result?.snapshot === null) { this.state = { ...this.state, pendingStartRequestId: undefined, pendingStartHostSessionId: undefined, confirmation: 'confirmed' }; this.publish(); }
+          if (status.operation === 'status' && status.result?.snapshot === null) { this.state = { ...this.state, pendingStartRequestId: undefined, pendingStartHostSessionId: undefined, pendingStartPreviousConfirmation: undefined, confirmation: 'confirmed' }; this.publish(); }
         } catch { /* Keep the original start identity for read-only reconciliation. */ }
       }
       this.transportFailure(error);

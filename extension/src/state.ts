@@ -5,9 +5,13 @@ export interface AppState {
   selectedItemId?: string; videoOptionId?: string; mode: 'video' | 'mp3'; bitrateKbps: MP3Bitrate;
   destination?: Destination; job?: JobSnapshot; history: JobSnapshot[]; confirmation: 'confirmed' | 'checking' | 'unconfirmed';
   pendingStartRequestId?: string; pendingStartHostSessionId?: string; error?: ProtocolError;
+  pendingStartPreviousConfirmation?: AppState['confirmation'];
   clearedJob?: Pick<JobSnapshot, 'hostSessionId' | 'jobId'>;
 }
 export function createInitialState(): AppState { return { connection: 'connecting', mode: 'video', bitrateKbps: 192, history: [], confirmation: 'unconfirmed' }; }
+export function markStartPending(state: AppState, requestId: string): AppState {
+  return { ...state, pendingStartRequestId: requestId, pendingStartHostSessionId: state.hostSessionId, pendingStartPreviousConfirmation: state.pendingStartRequestId ? state.pendingStartPreviousConfirmation : state.confirmation, confirmation: 'checking', error: undefined };
+}
 export function isTerminal(state: JobState): boolean { return ['completed', 'canceled', 'failed', 'interrupted'].includes(state); }
 export function chooseBestVideo(choices: VideoChoice[]): VideoChoice | undefined {
   const compatibility = (choice: VideoChoice) => choice.container === 'mp4' && /^(h264|avc1)/i.test(choice.videoCodec) && (!choice.hasAudio || /^(aac|mp4a)/i.test(choice.audioCodec ?? '')) ? 1 : 0;
@@ -30,7 +34,7 @@ function applySnapshot(state: AppState, snapshot: JobSnapshot, authoritative = f
   const history = isTerminal(snapshot.state)
     ? [snapshot, ...state.history.filter(record => record.hostSessionId !== snapshot.hostSessionId || record.jobId !== snapshot.jobId)].slice(0, 20)
     : state.history.slice(0, 19);
-  return { ...state, job: snapshot, history, pendingStartRequestId: undefined, pendingStartHostSessionId: undefined, confirmation: 'confirmed' };
+  return { ...state, job: snapshot, history, pendingStartRequestId: undefined, pendingStartHostSessionId: undefined, pendingStartPreviousConfirmation: undefined, confirmation: 'confirmed' };
 }
 export function reduceState(state: AppState, message: Response | JobEvent): AppState {
   if (message.kind === 'event') {
@@ -39,7 +43,11 @@ export function reduceState(state: AppState, message: Response | JobEvent): AppS
     return applySnapshot(state, { ...details, startRequestId: state.job.startRequestId });
   }
   if (message.operation !== 'handshake' && message.hostSessionId !== state.hostSessionId) return state;
-  if (message.error) return { ...state, error: message.error, ...(message.operation === 'start' ? { pendingStartRequestId: undefined } : {}), ...(message.operation === 'handshake' ? { connection: message.error.code === 'INCOMPATIBLE_PROTOCOL' ? 'incompatible' as const : 'error' as const } : {}) };
+  if (message.error) {
+    const rejectedStart = message.operation === 'start' && (!state.pendingStartRequestId || state.pendingStartRequestId === message.requestId);
+    const previousConfirmation = state.pendingStartPreviousConfirmation ?? (state.confirmation === 'checking' ? 'unconfirmed' : state.confirmation);
+    return { ...state, error: message.error, ...(rejectedStart ? { pendingStartRequestId: undefined, pendingStartHostSessionId: undefined, pendingStartPreviousConfirmation: undefined, confirmation: state.job ? previousConfirmation : 'confirmed' as const } : {}), ...(message.operation === 'handshake' ? { connection: message.error.code === 'INCOMPATIBLE_PROTOCOL' ? 'incompatible' as const : 'error' as const } : {}) };
+  }
   switch (message.operation) {
     case 'handshake': {
       const changedSession = state.hostSessionId !== message.hostSessionId;
@@ -65,14 +73,14 @@ export function reduceState(state: AppState, message: Response | JobEvent): AppS
       }
       return applySnapshot(state, { hostSessionId: message.hostSessionId, ...message.result });
     }
-    case 'status': return message.result.snapshot ? applySnapshot(state, message.result.snapshot, true) : state.job?.hostSessionId === state.hostSessionId || state.pendingStartHostSessionId === state.hostSessionId ? { ...state, job: undefined, pendingStartRequestId: undefined, pendingStartHostSessionId: undefined, confirmation: 'confirmed' } : state;
+    case 'status': return message.result.snapshot ? applySnapshot(state, message.result.snapshot, true) : state.job?.hostSessionId === state.hostSessionId || state.pendingStartHostSessionId === state.hostSessionId ? { ...state, job: undefined, pendingStartRequestId: undefined, pendingStartHostSessionId: undefined, pendingStartPreviousConfirmation: undefined, confirmation: 'confirmed' } : state;
     case 'cancel': return applySnapshot(state, message.result.snapshot, true);
     case 'reconcile': {
       const previousSession = state.pendingStartHostSessionId ?? state.job?.hostSessionId;
       if (previousSession && previousSession !== message.result.previousHostSessionId) return state;
       const snapshot = message.result.snapshot ?? (!state.pendingStartRequestId && state.job ? { hostSessionId: state.job.hostSessionId, jobId: state.job.jobId, startRequestId: state.job.startRequestId, sequence: state.job.sequence + 1, state: 'interrupted' as const } : undefined);
       const reconciled = snapshot ? applySnapshot(state, snapshot, true) : { ...state, ...(state.pendingStartRequestId ? { job: undefined, error: { code: 'SESSION_ENDED' as const, message: 'Previous start could not be confirmed', retryable: true } } : {}) };
-      return { ...reconciled, confirmation: message.result.outcome === 'confirmed' ? 'confirmed' : 'unconfirmed', pendingStartRequestId: undefined, pendingStartHostSessionId: undefined };
+      return { ...reconciled, confirmation: message.result.outcome === 'confirmed' ? 'confirmed' : 'unconfirmed', pendingStartRequestId: undefined, pendingStartHostSessionId: undefined, pendingStartPreviousConfirmation: undefined };
     }
   }
 }
