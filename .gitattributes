@@ -1,0 +1,3 @@
+# Preserve upstream bytes for files whose SHA256 is pinned in the release lock.
+/release/licenses/* -text
+/release/THIRD_PARTY_NOTICES.md -text
