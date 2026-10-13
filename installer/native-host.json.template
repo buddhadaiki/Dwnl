@@ -1,0 +1,7 @@
+{
+  "name": "com.dwnl.host",
+  "description": "Dwnl private native helper",
+  "path": "@@HOST_PATH_JSON@@",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://@@EXTENSION_ID@@/"]
+}

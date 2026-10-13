@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "distributionScope": "private-validation",
+  "completeCorrespondingSource": false,
+  "sourceBundleStatus": "Pinned upstream source references and license texts captured; complete corresponding source archives for all bundled dependencies were not assembled.",
+  "tools": [
+    {
+      "name": "yt-dlp",
+      "version": "2026.08.19",
+      "platform": "windows-x86_64",
+      "path": ".tools/media/bin/yt-dlp.exe",
+      "sha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
+      "sizeBytes": 17840399,
+      "releaseTag": "2026.08.19",
+      "releaseId": 373411891,
+      "releaseUrl": "https://github.com/yt-dlp/yt-dlp/releases/tag/2026.08.19",
+      "assetId": 521488854,
+      "assetApiUrl": "https://api.github.com/repos/yt-dlp/yt-dlp/releases/assets/521488854",
+      "downloadUrl": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe",
+      "downloadedArtifactPath": ".tools/media/bin/yt-dlp.exe",
+      "downloadedArtifactSha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
+      "publisherAssetDigest": "sha256:66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
+      "publisherDigestVerified": true,
+      "license": "GPL-3.0-or-later (bundled executable); upstream yt-dlp Unlicense",
+      "licenseFiles": [
+        "release/licenses/yt-dlp-LICENSE.txt",
+        "release/licenses/yt-dlp-THIRD_PARTY_LICENSES.txt"
+      ],
+      "sourceReferences": [
+        "https://github.com/yt-dlp/yt-dlp/tree/2026.08.19",
+        "https://github.com/yt-dlp/ejs/releases/tag/0.8.0",
+        "https://github.com/python/cpython/tree/v3.10.11"
+      ]
+    },
+    {
+      "name": "deno",
+      "version": "2.9.7",
+      "platform": "windows-x86_64",
+      "path": ".tools/media/bin/deno.exe",
+      "sha256": "e020f3e232bd16e33768dee528e5983349c962952051ced0a5d58ad42f5d9b33",
+      "sizeBytes": 97462048,
+      "releaseTag": "v2.9.7",
+      "releaseId": 390117055,
+      "releaseUrl": "https://github.com/denoland/deno/releases/tag/v2.9.7",
+      "assetId": 568431369,
+      "assetApiUrl": "https://api.github.com/repos/denoland/deno/releases/assets/568431369",
+      "downloadUrl": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-pc-windows-msvc.zip",
+      "downloadedArtifactPath": ".tools/media/downloads/deno-2.9.7-windows-x64.zip",
+      "downloadedArtifactSha256": "a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238",
+      "publisherAssetDigest": "sha256:a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238",
+      "publisherDigestVerified": true,
+      "license": "MIT; third-party components retain their own licenses",
+      "licenseFiles": [
+        "release/licenses/deno-LICENSE.txt",
+        "release/licenses/deno-node-types-LICENSE.txt",
+        "release/licenses/deno-undici-types-LICENSE.txt",
+        "release/licenses/deno-webgpu-LICENSE.txt"
+      ],
+      "sourceReferences": [
+        "https://github.com/denoland/deno/tree/v2.9.7",
+        "https://github.com/denoland/deno/blob/v2.9.7/Cargo.lock"
+      ]
+    },
+    {
+      "name": "ffmpeg",
+      "version": "N-127511-g01cf1a5396-20261013",
+      "platform": "windows-x86_64",
+      "path": ".tools/media/bin/ffmpeg.exe",
+      "sha256": "c1caa84cccf6fe4658f5b021d837d035d175e398a47e456bd557b19773485011",
+      "sizeBytes": 168951296,
+      "releaseTag": "latest",
+      "releaseId": 412077917,
+      "releaseUrl": "https://github.com/yt-dlp/FFmpeg-Builds/releases/tag/latest",
+      "assetId": 638160312,
+      "assetApiUrl": "https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases/assets/638160312",
+      "downloadUrl": "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+      "downloadedArtifactPath": ".tools/media/downloads/ffmpeg-2026-10-13-windows-x64-gpl.zip",
+      "downloadedArtifactSha256": "dfb89d02948f94b77a89c218e6abbb16032c19a329da972886f9029b82b229e0",
+      "publisherAssetDigest": "sha256:dfb89d02948f94b77a89c218e6abbb16032c19a329da972886f9029b82b229e0",
+      "publisherDigestVerified": true,
+      "license": "GPL-3.0-or-later (--enable-gpl --enable-version3)",
+      "licenseFiles": [
+        "release/licenses/ffmpeg-LICENSE.txt"
+      ],
+      "sourceReferences": [
+        "https://github.com/FFmpeg/FFmpeg/tree/01cf1a5396981e179ebfcdc6e6006d4070e71c3b",
+        "https://github.com/yt-dlp/FFmpeg-Builds/tree/bf23782fa09c1ab08a3c13f2f1508d7ef0e620c6",
+        "https://ffmpeg.org/legal.html"
+      ]
+    },
+    {
+      "name": "ffprobe",
+      "version": "N-127511-g01cf1a5396-20261013",
+      "platform": "windows-x86_64",
+      "path": ".tools/media/bin/ffprobe.exe",
+      "sha256": "e499affa4b94221e7ee496ccc96428d116bd5929a8279e71db72ed72e5f1208d",
+      "sizeBytes": 168736256,
+      "releaseTag": "latest",
+      "releaseId": 412077917,
+      "releaseUrl": "https://github.com/yt-dlp/FFmpeg-Builds/releases/tag/latest",
+      "assetId": 638160312,
+      "assetApiUrl": "https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases/assets/638160312",
+      "downloadUrl": "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+      "downloadedArtifactPath": ".tools/media/downloads/ffmpeg-2026-10-13-windows-x64-gpl.zip",
+      "downloadedArtifactSha256": "dfb89d02948f94b77a89c218e6abbb16032c19a329da972886f9029b82b229e0",
+      "publisherAssetDigest": "sha256:dfb89d02948f94b77a89c218e6abbb16032c19a329da972886f9029b82b229e0",
+      "publisherDigestVerified": true,
+      "license": "GPL-3.0-or-later (--enable-gpl --enable-version3)",
+      "licenseFiles": [
+        "release/licenses/ffmpeg-LICENSE.txt"
+      ],
+      "sourceReferences": [
+        "https://github.com/FFmpeg/FFmpeg/tree/01cf1a5396981e179ebfcdc6e6006d4070e71c3b",
+        "https://github.com/yt-dlp/FFmpeg-Builds/tree/bf23782fa09c1ab08a3c13f2f1508d7ef0e620c6",
+        "https://ffmpeg.org/legal.html"
+      ]
+    }
+  ],
+  "bundledYtDlpComponents": {
+    "python": "3.10.11",
+    "yt_dlp_ejs": "0.8.0",
+    "runtimeEvidence": ".tools/media/metadata/yt-dlp-offline-runtime-stderr.txt"
+  },
+  "upstreamVerificationManifest": {
+    "path": ".tools/media/verified-tools.json",
+    "sha256": "6021fc30b4464337f21708d3871a84c350e2e3963efc20682c5677501cfae024"
+  },
+  "capabilities": {
+    "libmp3lame": true,
+    "mp3EncodeReadback": ".tools/media/metadata/ffprobe-smoke.json",
+    "versionEvidence": [
+      "yt-dlp",
+      "deno",
+      "ffmpeg",
+      "ffprobe"
+    ]
+  },
+  "licenseFiles": [
+    {
+      "path": "release/licenses/deno-LICENSE.txt",
+      "sha256": "f62497fffecc0852960c8d3e6934b9db86d16396e9b604072e923892cae3a588"
+    },
+    {
+      "path": "release/licenses/deno-node-types-LICENSE.txt",
+      "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+    },
+    {
+      "path": "release/licenses/deno-undici-types-LICENSE.txt",
+      "sha256": "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27"
+    },
+    {
+      "path": "release/licenses/deno-webgpu-LICENSE.txt",
+      "sha256": "f62497fffecc0852960c8d3e6934b9db86d16396e9b604072e923892cae3a588"
+    },
+    {
+      "path": "release/licenses/FFmpeg-Builds-LICENSE.txt",
+      "sha256": "c1b3cc7eec42bd9c4f6247169bb887b4a9bc904abfd2a7f7f9231ed357844993"
+    },
+    {
+      "path": "release/licenses/ffmpeg-LICENSE.txt",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "path": "release/licenses/Inno-Setup-LICENSE.txt",
+      "sha256": "2e5346868c2a18434489824e11d65c3031620f792fefc415d05f19cd441abf5c"
+    },
+    {
+      "path": "release/licenses/THIRD-PARTY-NOTICES.md",
+      "sha256": "1bc798d4567282f93a37f4c8aaf260f746b5d583ed5461eb009cf3825f197251"
+    },
+    {
+      "path": "release/licenses/yt-dlp-LICENSE.txt",
+      "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+    },
+    {
+      "path": "release/licenses/yt-dlp-THIRD_PARTY_LICENSES.txt",
+      "sha256": "472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7"
+    }
+  ],
+  "notices": {
+    "path": "release/THIRD_PARTY_NOTICES.md",
+    "sha256": "d6a706a35699b27d6767bb40a06e0c8f954826ba677bdb8c2a685f22ac43673d"
+  },
+  "sourceArtifacts": [],
+  "installerEngine": {
+    "name": "Inno Setup",
+    "version": "7.1.0",
+    "licenseFile": "release/licenses/Inno-Setup-LICENSE.txt",
+    "sourceReference": "https://github.com/jrsoftware/issrc/tree/is-7_1_0",
+    "compilerSha256": "d06ebd38f38e3cee60a3c50cc45bd449d77e0bc6a5cabc607ea9886808e4de1a"
+  }
+}
