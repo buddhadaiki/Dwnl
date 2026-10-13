@@ -129,6 +129,9 @@ function New-DwnlStage {
     [void](Resolve-DwnlPayloadPath $root $relative)
     if (Test-Path -LiteralPath $out) { throw 'Package output already exists; choose a fresh OutputRoot. No automatic recursive cleanup.' }
     $payload = Join-Path $out 'payload'
+    $expectedHashes = @{ 'dwnl-host.exe' = $HostMetadata.sha256; 'THIRD_PARTY_NOTICES.md' = $Lock.notices.sha256 }
+    foreach ($entry in $Lock.tools) { $expectedHashes["bin/$($entry.name).exe"] = $entry.sha256 }
+    foreach ($license in $Lock.licenseFiles) { $expectedHashes['licenses/' + [IO.Path]::GetFileName($license.path)] = $license.sha256 }
     New-Item -ItemType Directory -Path (Join-Path $payload 'bin'), (Join-Path $payload 'licenses') -Force | Out-Null
     Copy-Item -LiteralPath $hostPath -Destination (Join-Path $payload 'dwnl-host.exe')
     $files = @('dwnl-host.exe')
@@ -144,6 +147,7 @@ function New-DwnlStage {
             $rel = 'sources/' + [IO.Path]::GetFileName($source.path)
             if (Test-Path -LiteralPath (Join-Path $payload $rel)) { throw 'Source archive destination names collide.' }
             Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $payload $rel); $files += $rel
+            $expectedHashes[$rel] = $source.sha256
             $runtimeLock.sourceArtifacts += [ordered]@{ path=$rel; sha256=$source.sha256; covers=$source.covers }
         }
     }
@@ -153,7 +157,11 @@ function New-DwnlStage {
     Copy-Item -LiteralPath (Resolve-DwnlPayloadPath $root $Lock.notices.path) -Destination (Join-Path $payload 'THIRD_PARTY_NOTICES.md'); $files += 'THIRD_PARTY_NOTICES.md'
     $policy = [ordered]@{ schemaVersion = 1; hostName = $Identity.hostName; allowedOrigin = "chrome-extension://$($Identity.extensionId)/"; executableFiles = @('dwnl-host.exe','bin/yt-dlp.exe','bin/deno.exe','bin/ffmpeg.exe','bin/ffprobe.exe'); registryRoot = 'HKCU'; registryKey = 'Software\Google\Chrome\NativeMessagingHosts\com.dwnl.host'; manifestRelativePath = 'native-host.json'; removeManifestAndKeyOnlyWhenBothOwned = $true; preserveDownloads = $true; preserveExtension = $true; refuseActiveOwnedFiles = $true; terminateProcesses = $false }
     $policy | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $payload 'install-policy.json') -Encoding utf8; $files += 'install-policy.json'
-    $hashes = @(); foreach ($rel in $files) { $hashes += [ordered]@{ path = $rel; sha256 = Get-DwnlSha256 (Join-Path $payload $rel); sizeBytes = (Get-Item -LiteralPath (Join-Path $payload $rel)).Length } }
+    $hashes = @(); foreach ($rel in $files) {
+        $actualHash = Get-DwnlSha256 (Join-Path $payload $rel)
+        if ($expectedHashes.ContainsKey($rel) -and $actualHash -ne $expectedHashes[$rel]) { throw "Staged payload hash mismatch: $rel" }
+        $hashes += [ordered]@{ path = $rel; sha256 = $actualHash; sizeBytes = (Get-Item -LiteralPath (Join-Path $payload $rel)).Length }
+    }
     $report = [ordered]@{ schemaVersion = 1; packageMode = $(if ($ValidationOnly) { 'validation-only-do-not-distribute' } else { 'private-prototype' }); redistributionReady = $false; completeCorrespondingSource = [bool]$Lock.completeCorrespondingSource; sourceBundleStatus = $Lock.sourceBundleStatus; identity = $Identity; host = $HostMetadata; payloadFiles = $files; payloadHashes = $hashes; compiledInstaller = $null; installedOrRegistered = $false }
     $report | ConvertTo-Json -Depth 40 | Set-Content -LiteralPath (Join-Path $out 'package-report.json') -Encoding utf8
     return $report
@@ -163,7 +171,7 @@ function Assert-DwnlMediaCapabilities {
     param([string]$ProjectRoot, $Lock, [string]$OutputRoot)
     foreach ($entry in $Lock.tools) {
         $path = Assert-DwnlBinary $ProjectRoot $entry
-        $args = $(if ($entry.name -in @('ffmpeg','ffprobe')) { @('-version') } else { @('--version') })
+        $args = $(if ($entry.name -eq 'yt-dlp') { @('--ignore-config','--no-config-locations','--no-plugin-dirs','--no-remote-components','--version') } elseif ($entry.name -in @('ffmpeg','ffprobe')) { @('-version') } else { @('--version') })
         $version = & $path @args 2>&1 | Out-String
         if ($LASTEXITCODE -ne 0 -or -not $version.Contains($entry.version)) { throw "Runtime version probe failed: $($entry.name)" }
     }
@@ -190,7 +198,9 @@ function Invoke-DwnlPackage {
     # Stage-only is validation-only and cannot weaken the normal release source gate.
     $validation = $ValidationOnly -or $StageOnly
     $report = New-DwnlStage -ProjectRoot $root -OutputRoot $OutputRoot -Identity $identity -Lock $lock -HostMetadata $hostMetadata -ValidationOnly:$validation
-    Assert-DwnlMediaCapabilities -ProjectRoot $root -Lock $lock -OutputRoot $OutputRoot
+    $stagedRoot = Join-Path $OutputRoot 'payload'
+    $stagedLock = Get-Content -LiteralPath (Join-Path $stagedRoot 'dependencies.lock.json') -Raw | ConvertFrom-Json
+    Assert-DwnlMediaCapabilities -ProjectRoot $stagedRoot -Lock $stagedLock -OutputRoot $OutputRoot
     if (-not $StageOnly) {
         $compilerMetadata = Get-Content -LiteralPath (Join-Path $root '.tools/inno/verified-inno.json') -Raw | ConvertFrom-Json
         $compiler = Assert-DwnlBinary -ProjectRoot $root -Entry ([pscustomobject]@{ name='ISCC'; version=$compilerMetadata.version; platform=$compilerMetadata.platform; path=$compilerMetadata.path; sha256=$compilerMetadata.sha256; sizeBytes=(Get-Item -LiteralPath (Join-Path $root $compilerMetadata.path)).Length })
@@ -199,7 +209,9 @@ function Invoke-DwnlPackage {
             $source = Join-Path $payload $file; $destination = '{app}'
             $dir = [IO.Path]::GetDirectoryName($file.Replace('/', '\'))
             if ($dir) { $destination += '\' + $dir }
-            $include += 'Source: "' + $source.Replace('"','""') + '"; DestDir: "' + $destination + '"; Flags: ignoreversion'
+            $expectedHash = ($report.payloadHashes | Where-Object path -eq $file).sha256
+            if ($expectedHash -notmatch '^[0-9a-f]{64}$') { throw 'Missing immutable payload hash for compiler input.' }
+            $include += 'Source: "' + $source.Replace('"','""') + '"; DestDir: "' + $destination + '"; Hash: "' + $expectedHash + '"; Flags: ignoreversion'
         }
         $include | Set-Content -LiteralPath (Join-Path $OutputRoot 'payload-files.iss') -Encoding utf8
         $ownedPaths = @($report.payloadFiles + 'native-host.json' | ForEach-Object { "'" + $_.Replace('/', '\').Replace("'", "''") + "'" })

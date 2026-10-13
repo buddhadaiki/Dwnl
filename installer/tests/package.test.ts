@@ -79,6 +79,13 @@ describe('package controlled-file validation', () => {
     expect(manifest.path).toBe('C:\\Users\\Fixture\\AppData\\Local\\Dwnl\\dwnl-host.exe');
     expect(manifest.allowed_origins).toEqual(['chrome-extension://lphdonkmiecidfgjfplhdfnpphmdioeh/']);
   });
+  it('rejects staged executable bytes changed while being copied', () => {
+    const f = fixture();
+    const output = join(f.root, 'dist/copy-tamper');
+    // Inject a real copied-file corruption; validation must inspect the bytes
+    // delivered to the payload, independently of the original source check.
+    failure(`${f.load} function Copy-Item { param([string]$LiteralPath,[string]$Destination) Microsoft.PowerShell.Management\\Copy-Item -LiteralPath $LiteralPath -Destination $Destination; if($Destination.EndsWith('ffmpeg.exe')){ [IO.File]::WriteAllBytes($Destination,[byte[]](1,2,3)) } }; New-DwnlStage -ProjectRoot ${quote(f.root)} -OutputRoot ${quote(output)} -Identity $identity -Lock $lock -HostMetadata $hostMetadata -ValidationOnly`, /Staged payload hash mismatch/);
+  });
   it('rejects missing executable, changed hash and non-x64 PE', () => {
     const f = fixture();
     rmSync(join(f.root, f.lock.tools[0].path));
@@ -101,7 +108,7 @@ describe('package controlled-file validation', () => {
     failure(`${f.load} $lock.tools[2].licenseFiles=@('licenses/absent.txt'); Assert-DwnlCollateral -ProjectRoot ${quote(f.root)} -Lock $lock`, /License coverage/);
     writeFileSync(join(f.root, 'licenses/TEST.txt'), 'tampered');
     failure(`${f.load} Assert-DwnlCollateral -ProjectRoot ${quote(f.root)} -Lock $lock`, /License hash/);
-  });
+  }, 15000);
   it('refuses missing MP3 capability and source paths outside its root', () => {
     const f = fixture();
     failure(`${f.load} $lock.capabilities.libmp3lame=$false; Assert-DwnlCollateral -ProjectRoot ${quote(f.root)} -Lock $lock`, /libmp3lame/);

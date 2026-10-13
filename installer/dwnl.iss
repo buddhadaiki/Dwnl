@@ -118,10 +118,13 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var Lines: TArrayOfString;
 begin
   if CurStep = ssPostInstall then begin
     ExtractTemporaryFile('native-host.json.template');
-    if not SaveStringToFile(ExpandConstant('{app}\native-host.json'), AnsiString(ManifestContents()), False) then
+    SetArrayLength(Lines, 1);
+    Lines[0] := ManifestContents();
+    if not SaveStringsToUTF8FileWithoutBOM(ExpandConstant('{app}\native-host.json'), Lines, False) then
       RaiseException('Native manifest write failed.');
   end;
 end;
@@ -133,15 +136,16 @@ begin
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var RegisteredPath, ManifestPath, Actual, Expected, HostPath: string; Text: AnsiString;
+var RegisteredPath, ManifestPath, Actual, Expected, HostPath: string; Lines: TArrayOfString; I: Integer;
 begin
   if CurUninstallStep <> usUninstall then Exit;
   ManifestPath := ExpandConstant('{app}\native-host.json');
   if IsReparsePath(ManifestPath) then Exit;
   if not RegQueryStringValue(HKCU, NativeKey, '', RegisteredPath) then Exit;
   if CompareText(RegisteredPath, ManifestPath) <> 0 then Exit;
-  if not LoadStringFromFile(ManifestPath, Text) then Exit;
-  Actual := String(Text);
+  if not LoadStringsFromFile(ManifestPath, Lines) then Exit;
+  Actual := '';
+  for I := 0 to GetArrayLength(Lines) - 1 do Actual := Actual + Lines[I] + #10;
   HostPath := JsonEscape(ExpandConstant('{app}\dwnl-host.exe'));
   // Manifest is generated with a fixed structure; exact normalized bytes prove ownership.
   Expected := '{' + #10 + '  "name": "com.dwnl.host",' + #10 +
@@ -150,7 +154,7 @@ begin
     '  "type": "stdio",' + #10 +
     '  "allowed_origins": ["chrome-extension://{#ExtensionId}/"]' + #10 + '}' + #10;
   StringChangeEx(Actual, #13#10, #10, True);
-  if Actual <> Expected then Exit;
+  if Trim(Actual) <> Trim(Expected) then Exit;
   if DeleteFile(ManifestPath) then begin
     RegDeleteValue(HKCU, NativeKey, '');
     RegDeleteKeyIfEmpty(HKCU, NativeKey);

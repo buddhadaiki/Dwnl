@@ -44,3 +44,5 @@ This static Windows x64 build has `--enable-gpl --enable-version3` and includes 
 
 The publisher's `latest` release URL changes over time. The saved release ID, asset ID, SHA256, upstream source commit, and builder source snapshot pin the exact local files. Complete corresponding source archives for every compiled dependency have not been assembled in this local development tool folder. No public distribution was performed.
 
+
+Partial official source archives are included with validation payloads. Family attribution does not establish complete corresponding source; see dependencies.lock.json. Normal package generation remains blocked while completeCorrespondingSource is false.

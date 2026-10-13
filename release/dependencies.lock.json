@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "distributionScope": "private-validation",
   "completeCorrespondingSource": false,
-  "sourceBundleStatus": "Pinned upstream source references and license texts captured; complete corresponding source archives for all bundled dependencies were not assembled.",
+  "sourceBundleStatus": "Partial official exact-version/commit source archives captured. Complete native/transitive source/build and shipped notice correspondence remain unverified; normal release source gate remains blocked.",
   "tools": [
     {
       "name": "yt-dlp",
@@ -179,14 +179,90 @@
   ],
   "notices": {
     "path": "release/THIRD_PARTY_NOTICES.md",
-    "sha256": "d6a706a35699b27d6767bb40a06e0c8f954826ba677bdb8c2a685f22ac43673d"
+    "sha256": "50e762a0f10dd52fc91a0c0217ad4ab4f71edd0cccff63081b36ef8274ec8d88"
   },
-  "sourceArtifacts": [],
+  "sourceArtifacts": [
+    {
+      "path": ".tools/sources/archives/yt-dlp-ejs-0.8.0-source.tar.gz",
+      "sha256": "47830f927650be514ec13c90b0e15fffbc8c462675d01c4a201632fae7ebdcfc",
+      "sizeBytes": 101641,
+      "covers": [
+        "yt-dlp"
+      ],
+      "sourceName": "yt-dlp-ejs",
+      "sourceRef": "0.8.0",
+      "sourceCommit": "4fb477f4af56880cfd324c48bd4294a2d2294e50",
+      "coverageStatus": "partial; family attribution only, not complete corresponding source"
+    },
+    {
+      "path": ".tools/sources/archives/yt-dlp-2026.08.19-source.tar.gz",
+      "sha256": "7206981142eb461cfa603c360a55e0d08f3ed58cc754000ed821ad3ebac31ea0",
+      "sizeBytes": 3115089,
+      "covers": [
+        "yt-dlp"
+      ],
+      "sourceName": "yt-dlp",
+      "sourceRef": "2026.08.19",
+      "sourceCommit": "3a08beaf031ab68f966401ead017ac81fe8486cf",
+      "coverageStatus": "partial; family attribution only, not complete corresponding source"
+    },
+    {
+      "path": ".tools/sources/archives/ffmpeg-builds-bf23782fa09c1ab08a3c13f2f1508d7ef0e620c6-source.tar.gz",
+      "sha256": "9e03fa120553f409843946589b73aee1d3851b63c87967ee14390f41923e2e22",
+      "sizeBytes": 118335,
+      "covers": [
+        "ffmpeg",
+        "ffprobe"
+      ],
+      "sourceName": "FFmpeg-Builds",
+      "sourceRef": "bf23782fa09c1ab08a3c13f2f1508d7ef0e620c6",
+      "sourceCommit": "bf23782fa09c1ab08a3c13f2f1508d7ef0e620c6",
+      "coverageStatus": "partial; family attribution only, not complete corresponding source"
+    },
+    {
+      "path": ".tools/sources/archives/ffmpeg-01cf1a5396981e179ebfcdc6e6006d4070e71c3b-source.tar.gz",
+      "sha256": "f05fc64e7d2db698646cc24bc85f16032c3109cbddc53d36ff07714becaef95a",
+      "sizeBytes": 17874365,
+      "covers": [
+        "ffmpeg",
+        "ffprobe"
+      ],
+      "sourceName": "FFmpeg",
+      "sourceRef": "01cf1a5396981e179ebfcdc6e6006d4070e71c3b",
+      "sourceCommit": "01cf1a5396981e179ebfcdc6e6006d4070e71c3b",
+      "coverageStatus": "partial; family attribution only, not complete corresponding source"
+    },
+    {
+      "path": ".tools/sources/archives/cpython-v3.10.11-source.tar.gz",
+      "sha256": "4e70326ceb5b71ae3a48cf4cd53c15c5e632dd535fe6f78aa3f0bafdf2628b52",
+      "sizeBytes": 26335944,
+      "covers": [
+        "yt-dlp"
+      ],
+      "sourceName": "CPython",
+      "sourceRef": "v3.10.11",
+      "sourceCommit": "7d4cc5aa854fdea4d01a5b9c59e37c6e62f1103d",
+      "coverageStatus": "partial; family attribution only, not complete corresponding source"
+    },
+    {
+      "path": ".tools/sources/archives/deno-v2.9.7-source.tar.gz",
+      "sha256": "fb58a70f221ea64e9b44ade6bc4656ab8427fc131f13700bcda2788a775816fb",
+      "sizeBytes": 32789135,
+      "covers": [
+        "deno"
+      ],
+      "sourceName": "Deno",
+      "sourceRef": "v2.9.7",
+      "sourceCommit": "0c071246a412575e07423263404a5d13e7ed6aa2",
+      "coverageStatus": "partial; family attribution only, not complete corresponding source"
+    }
+  ],
   "installerEngine": {
     "name": "Inno Setup",
     "version": "7.1.0",
     "licenseFile": "release/licenses/Inno-Setup-LICENSE.txt",
     "sourceReference": "https://github.com/jrsoftware/issrc/tree/is-7_1_0",
     "compilerSha256": "d06ebd38f38e3cee60a3c50cc45bd449d77e0bc6a5cabc607ea9886808e4de1a"
-  }
+  },
+  "sourceCoverageMeaning": "covers identifies related bundled binary families and does not assert full corresponding-source coverage"
 }
