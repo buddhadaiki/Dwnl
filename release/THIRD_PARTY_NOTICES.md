@@ -46,3 +46,12 @@ The publisher's `latest` release URL changes over time. The saved release ID, as
 
 
 Partial official source archives are included with validation payloads. Family attribution does not establish complete corresponding source; see dependencies.lock.json. Normal package generation remains blocked while completeCorrespondingSource is false.
+
+## Native host static dependencies
+
+The Windows helper was compiled with Go 1.27.2 and statically includes the Go runtime/standard library and golang.org/x/sys v0.38.0. The compiler's `go version -m dist/helper/dwnl-host.exe` readback identifies Go 1.27.2, x/sys v0.38.0, Windows amd64 and CGO_ENABLED=0. No Go or x/sys runtime is installed globally.
+
+Both components use the BSD 3-Clause license. Binary redistribution must retain the copyright notice, conditions and disclaimer. Their actual unmodified local license texts are preserved as `licenses/Go-1.27.2-LICENSE.txt` and `licenses/golang.org-x-sys-v0.38.0-LICENSE.txt`, with exact SHA256 recorded in dependencies.lock.json. These permissive notice additions do not establish completeness of GPL media corresponding source or change the package's validation-only status.
+
+- Go 1.27.2 source/license: https://cs.opensource.google/go/go/+/refs/tags/go1.27.2:LICENSE
+- golang.org/x/sys v0.38.0 source/license: https://cs.opensource.google/go/x/sys/+/refs/tags/v0.38.0:LICENSE

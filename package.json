@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:extension": "node tools/build-extension.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

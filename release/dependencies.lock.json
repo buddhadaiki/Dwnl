@@ -175,11 +175,29 @@
     {
       "path": "release/licenses/yt-dlp-THIRD_PARTY_LICENSES.txt",
       "sha256": "472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7"
+    },
+    {
+      "path": "release/licenses/Go-1.27.2-LICENSE.txt",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+      "component": "Go runtime and standard library",
+      "version": "1.27.2",
+      "license": "BSD-3-Clause",
+      "usage": "statically included in dwnl-host.exe",
+      "sourceReference": "https://cs.opensource.google/go/go/+/refs/tags/go1.27.2:LICENSE"
+    },
+    {
+      "path": "release/licenses/golang.org-x-sys-v0.38.0-LICENSE.txt",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+      "component": "golang.org/x/sys",
+      "version": "v0.38.0",
+      "license": "BSD-3-Clause",
+      "usage": "statically included in dwnl-host.exe",
+      "sourceReference": "https://cs.opensource.google/go/x/sys/+/refs/tags/v0.38.0:LICENSE"
     }
   ],
   "notices": {
     "path": "release/THIRD_PARTY_NOTICES.md",
-    "sha256": "50e762a0f10dd52fc91a0c0217ad4ab4f71edd0cccff63081b36ef8274ec8d88"
+    "sha256": "5823b3672e2725040a72b48f04a28e9127078481dd6ac51a52f3407560209904"
   },
   "sourceArtifacts": [
     {
