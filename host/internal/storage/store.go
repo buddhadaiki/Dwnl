@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 var ErrCorrupt = errors.New("corrupt private ledger")
@@ -258,6 +259,9 @@ func (s *Store) ensure() error {
 	}
 }
 func strictJSON(b []byte, out any) error {
+	if !utf8.Valid(b) {
+		return ErrCorrupt
+	}
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(out); err != nil {

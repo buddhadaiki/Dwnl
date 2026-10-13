@@ -171,8 +171,8 @@ function Assert-DwnlMediaCapabilities {
     param([string]$ProjectRoot, $Lock, [string]$OutputRoot)
     foreach ($entry in $Lock.tools) {
         $path = Assert-DwnlBinary $ProjectRoot $entry
-        $args = $(if ($entry.name -eq 'yt-dlp') { @('--ignore-config','--no-config-locations','--no-plugin-dirs','--no-remote-components','--version') } elseif ($entry.name -in @('ffmpeg','ffprobe')) { @('-version') } else { @('--version') })
-        $version = & $path @args 2>&1 | Out-String
+        [string[]]$probeArguments = @(if ($entry.name -eq 'yt-dlp') { @('--ignore-config','--no-config-locations','--no-plugin-dirs','--no-remote-components','--version') } elseif ($entry.name -in @('ffmpeg','ffprobe')) { @('-version') } else { @('--version') })
+        $version = & $path @probeArguments 2>&1 | Out-String
         if ($LASTEXITCODE -ne 0 -or -not $version.Contains($entry.version)) { throw "Runtime version probe failed: $($entry.name)" }
     }
     $ffmpeg = Resolve-DwnlPayloadPath $ProjectRoot ($Lock.tools | Where-Object name -eq 'ffmpeg').path
@@ -180,7 +180,7 @@ function Assert-DwnlMediaCapabilities {
     $encoder = & $ffmpeg -hide_banner -encoders 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0 -or $encoder -notmatch '\blibmp3lame\b') { throw 'Runtime libmp3lame capability probe failed.' }
     $smoke = Join-Path $OutputRoot 'capability-smoke.mp3'
-    & $ffmpeg -hide_banner -loglevel error -nostdin -f lavfi -i 'sine=frequency=997:sample_rate=44100:duration=0.1' -c:a libmp3lame -b:a 192k -n $smoke 2>&1 | Out-Null
+    & $ffmpeg -hide_banner -loglevel error -nostdin -f lavfi -i 'sine=frequency=997:sample_rate=44100:duration=1' -c:a libmp3lame -b:a 192k -n $smoke 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Runtime MP3 encoder smoke failed.' }
     $probe = & $ffprobe -v error -show_streams -show_format -of json $smoke 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw 'Runtime ffprobe smoke failed.' }
