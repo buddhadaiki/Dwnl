@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.tools/
+.superpowers/
+coverage/
+*.exe
+*.test
+*.log
+.DS_Store

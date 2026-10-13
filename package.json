@@ -1,0 +1,16 @@
+{
+  "name": "dwnl-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "happy-dom": "21.0.1",
+    "typescript": "7.0.2",
+    "vitest": "5.0.4"
+  }
+}
