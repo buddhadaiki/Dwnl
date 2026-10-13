@@ -46,7 +46,7 @@ type Rule = (value: unknown) => void;
 type Fields = Record<string, Rule>;
 function fail(code: ErrorCode = "INVALID_MESSAGE", message = "Invalid protocol message"): never { throw new ProtocolDecodeError(code, message); }
 function requireCondition(condition: unknown): asserts condition { if (!condition) fail(); }
-const text = (max = 512): Rule => value => requireCondition(typeof value === "string" && value.length > 0 && value.trim().length > 0 && new TextEncoder().encode(value).length <= max && !/[\u0000-\u001f\u007f]/.test(value));
+const text = (max = 512): Rule => value => requireCondition(typeof value === "string" && value.length > 0 && !/^[\p{White_Space}\uFEFF]*$/u.test(value) && new TextEncoder().encode(value).length <= max && !/[\u0000-\u001f\u007f]/.test(value));
 const id: Rule = value => requireCondition(typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value));
 const bool: Rule = value => requireCondition(typeof value === "boolean");
 const literal = (expected: unknown): Rule => value => requireCondition(value === expected);
