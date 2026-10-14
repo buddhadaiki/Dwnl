@@ -100,11 +100,11 @@ func ParseMetadata(raw []byte) ([]contracts.MediaItem, error) {
 			omitted = true
 		}
 		audio := ""
-		bestABR := -1.0
+		bestAudio := audioFormat(item.Formats)
 		for _, f := range item.Formats {
-			if !f.DRM && hasCodec(f.ACodec) && !hasCodec(f.VCodec) && f.ABR > bestABR {
+			if f.ID == bestAudio {
 				audio = f.ACodec
-				bestABR = f.ABR
+				break
 			}
 		}
 		m := contracts.MediaItem{ItemID: fmt.Sprintf("item-%d", i+1), Title: title, VideoChoices: []contracts.VideoChoice{}, OmittedMetadata: omitted}
@@ -117,7 +117,11 @@ func ParseMetadata(raw []byte) ([]contracts.MediaItem, error) {
 				continue
 			}
 			if hasCodec(f.ACodec) {
-				m.HasAudio = true
+				if f.ACodec == "unknown" {
+					m.AudioUnknown = true
+				} else {
+					m.HasAudio = true
+				}
 			}
 			if !hasCodec(f.VCodec) {
 				continue
@@ -127,6 +131,10 @@ func ParseMetadata(raw []byte) ([]contracts.MediaItem, error) {
 				a = audio
 			}
 			choice := contracts.VideoChoice{OptionID: fmt.Sprintf("option-%d", len(m.VideoChoices)+1), Container: containerFor(f.VCodec, a), VideoCodec: f.VCodec, HasAudio: hasCodec(a), Width: positiveUint(f.Width), Height: positiveUint(f.Height)}
+			if a == "unknown" {
+				choice.HasAudio = false
+				choice.AudioUnknown = true
+			}
 			if choice.HasAudio {
 				choice.AudioCodec = a
 			}

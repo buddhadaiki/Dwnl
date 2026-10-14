@@ -10,8 +10,8 @@ export interface ProtocolError { code: ErrorCode; message: string; retryable: bo
 export interface Dependency { name: "yt-dlp" | "deno" | "ffmpeg" | "ffprobe"; version: string; available: boolean }
 export interface Capabilities { video: boolean; mp3: boolean; networkAccess: boolean }
 export interface Destination { destinationId: string; label: string }
-export interface VideoChoice { optionId: string; container: "mp4" | "webm" | "mkv"; width?: number; height?: number; videoCodec: string; audioCodec?: string; hasAudio: boolean; sizeBytes?: number; sizeEstimated: boolean }
-export interface MediaItem { itemId: string; title: string; durationSeconds?: number; hasAudio: boolean; videoChoices: VideoChoice[]; formatsCursor?: string; omittedMetadata: boolean }
+export interface VideoChoice { optionId: string; container: "mp4" | "webm" | "mkv"; width?: number; height?: number; videoCodec: string; audioCodec?: string; hasAudio: boolean; audioUnknown?: boolean; sizeBytes?: number; sizeEstimated: boolean }
+export interface MediaItem { itemId: string; title: string; durationSeconds?: number; hasAudio: boolean; audioUnknown?: boolean; videoChoices: VideoChoice[]; formatsCursor?: string; omittedMetadata: boolean }
 export interface Analysis { analysisId: string; hostSessionId: string; sourceUrl: string; expiresAt: string; items: MediaItem[]; omittedMetadata: boolean }
 export interface Progress { stage: "downloading" | "muxing" | "converting" | "saving"; completedBytes?: number; totalBytes?: number; processedSeconds?: number; durationSeconds?: number; percent?: number }
 export interface CompletedFile { path: string; format: "mp4" | "webm" | "mkv" | "mp3"; sizeBytes: number; sha256: string; videoCodec?: string; audioCodec?: string; mp3BitrateKbps?: MP3Bitrate }
@@ -94,7 +94,7 @@ const timestamp: Rule = value => {
 };
 const protocolError = structure({ code: oneOf(errorCodes), message: text(4096), retryable: bool });
 const destination = { destinationId: id, label: text(4096) };
-const videoChoice = structure({ optionId: id, container: oneOf(["mp4", "webm", "mkv"]), videoCodec: text(), hasAudio: bool, sizeEstimated: bool }, { width: positiveInt, height: positiveInt, audioCodec: text(), sizeBytes: uint }, value => {
+const videoChoice = structure({ optionId: id, container: oneOf(["mp4", "webm", "mkv"]), videoCodec: text(), hasAudio: bool, sizeEstimated: bool }, { width: positiveInt, height: positiveInt, audioCodec: text(), sizeBytes: uint, audioUnknown: bool }, value => {
   if (value.hasAudio === false) requireCondition(!Object.hasOwn(value, "audioCodec"));
   if (value.sizeEstimated === true) requireCondition(Object.hasOwn(value, "sizeBytes"));
 });
@@ -102,7 +102,7 @@ function uniqueIDs(values: unknown, key: string) {
   const ids = (values as Record<string, unknown>[]).map(value => value[key]);
   requireCondition(new Set(ids).size === ids.length);
 }
-const mediaItem = structure({ itemId: id, title: text(4096), hasAudio: bool, videoChoices: list(videoChoice), omittedMetadata: bool }, { durationSeconds: positive, formatsCursor: id }, value => uniqueIDs(value.videoChoices, "optionId"));
+const mediaItem = structure({ itemId: id, title: text(4096), hasAudio: bool, videoChoices: list(videoChoice), omittedMetadata: bool }, { durationSeconds: positive, formatsCursor: id, audioUnknown: bool }, value => uniqueIDs(value.videoChoices, "optionId"));
 const analysis = structure({ analysisId: id, hostSessionId: id, sourceUrl: sourceURL, expiresAt: timestamp, items: list(mediaItem, 1), omittedMetadata: bool }, {}, value => uniqueIDs(value.items, "itemId"));
 const progress = structure({ stage: oneOf(["downloading", "muxing", "converting", "saving"]) }, { completedBytes: uint, totalBytes: positiveInt, processedSeconds: numeric(), durationSeconds: positive, percent: numeric(0, 100) }, value => {
   if (Object.hasOwn(value, "totalBytes")) requireCondition(Object.hasOwn(value, "completedBytes") && (value.completedBytes as number) <= (value.totalBytes as number));
@@ -196,7 +196,7 @@ export function validateRequestContext(request: Request, context: ValidationCont
       const selectedOptionId = request.payload.videoOptionId;
       if (!item.videoChoices.some(value => value.optionId === selectedOptionId)) fail("INVALID_SELECTION", "Video option is not part of the registered item");
     }
-    if (request.payload.mode === "mp3" && !item.hasAudio) fail("NO_AUDIO", "Selected item has no audio");
+    if (request.payload.mode === "mp3" && !item.hasAudio && !item.audioUnknown) fail("NO_AUDIO", "Selected item has no audio");
   }
 }
 export function decodeMessage(value: unknown): Response | JobEvent {

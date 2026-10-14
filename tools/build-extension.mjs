@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir, readdir, copyFile, lstat, realpath, rm } fr
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const root = await realpath(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 const source = path.join(root, 'extension');
@@ -11,6 +12,18 @@ const markerName = '.dwnl-extension-build';
 const marker = 'Dwnl owned extension build v1\n';
 const identity = JSON.parse(await readFile(path.join(root, 'contracts/extension-identity.json'), 'utf8'));
 const manifest = JSON.parse(await readFile(path.join(source, 'manifest.json'), 'utf8'));
+const args=process.argv.slice(2);
+if(args.length && (args.length!==2 || args[0]!=='--installer')) throw new Error('Use --installer <verified bootstrap path>.');
+let installer;
+if(args.length) {
+  const input=await realpath(path.resolve(args[1]));
+  if(!input.startsWith(dist+path.sep) || path.basename(input)!=='Dwnl-Setup.exe') throw new Error('Setup must be the owned dist bootstrap artifact.');
+  const report=JSON.parse((await readFile(path.join(path.dirname(input),'package-report.json'),'utf8')).replace(/^\uFEFF/,''));
+  const bytes=await readFile(input);
+  const sha256=createHash('sha256').update(bytes).digest('hex');
+  if(report.packageMode!=='supplier-acquisition' || report.installedOrRegistered!==false || !report.compiledInstaller || report.compiledInstaller.executed!==false || report.compiledInstaller.sha256!==sha256 || report.compiledInstaller.sizeBytes!==bytes.length || report.identity.extensionId!==identity.extensionId || report.payloadFiles.filter(p=>p.endsWith('.exe')).join(',')!=='dwnl-host.exe') throw new Error('Bootstrap provenance/hash does not match.');
+  installer={input,sha256,sizeBytes:bytes.length};
+}
 
 if (manifest.manifest_version !== 3 || manifest.externally_connectable || manifest.content_scripts || manifest.host_permissions?.length) {
   throw new Error('Manifesto fora do escopo aprovado do protótipo.');
@@ -21,6 +34,8 @@ if (required.some(p => !permissions.has(p)) || [...permissions].some(p => ![...r
   throw new Error('Permissões do manifesto não correspondem ao desenho aprovado.');
 }
 manifest.key = identity.key;
+if(installer) manifest.permissions=[...permissions,'downloads'].filter((value,index,array)=>array.indexOf(value)===index);
+else manifest.permissions=[...permissions].filter(value=>value!=='downloads');
 const checked = spawnSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '--noEmit'], { cwd: root, stdio: 'inherit' });
 if (checked.status !== 0) throw new Error('Typecheck falhou; extensão não gerada.');
 
@@ -66,6 +81,12 @@ async function buildDirectory(input, relative = '') {
   }
 }
 await buildDirectory(source);
+if(installer) {
+  const folder=path.join(output,'installer'); await mkdir(folder);
+  const file=path.join(folder,'Dwnl-Setup.exe');await copyFile(installer.input,file);
+  if(createHash('sha256').update(await readFile(file)).digest('hex')!==installer.sha256) throw new Error('Copied setup hash changed.');
+  await writeFile(path.join(folder,'build-provenance.json'),JSON.stringify({schemaVersion:1,packageMode:'supplier-acquisition',sha256:installer.sha256,sizeBytes:installer.sizeBytes,executed:false},null,2)+'\n');
+}
 if (!compiled) throw new Error('Nenhum módulo de produção compilado.');
 // TypeScript 7 exposes the supported compiler CLI; do not depend on the old
 // transpileModule API. Emit only production sources after the full typecheck.

@@ -110,6 +110,7 @@ type VideoChoice struct {
 	VideoCodec    string  `json:"videoCodec"`
 	AudioCodec    string  `json:"audioCodec,omitempty"`
 	HasAudio      bool    `json:"hasAudio"`
+	AudioUnknown  bool    `json:"audioUnknown,omitempty"`
 	SizeBytes     *uint64 `json:"sizeBytes,omitempty"`
 	SizeEstimated bool    `json:"sizeEstimated"`
 }
@@ -118,6 +119,7 @@ type MediaItem struct {
 	Title           string        `json:"title"`
 	DurationSeconds *float64      `json:"durationSeconds,omitempty"`
 	HasAudio        bool          `json:"hasAudio"`
+	AudioUnknown    bool          `json:"audioUnknown,omitempty"`
 	VideoChoices    []VideoChoice `json:"videoChoices"`
 	FormatsCursor   string        `json:"formatsCursor,omitempty"`
 	OmittedMetadata bool          `json:"omittedMetadata"`

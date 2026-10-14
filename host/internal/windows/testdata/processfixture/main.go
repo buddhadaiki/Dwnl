@@ -31,6 +31,14 @@ func main() {
 	}
 	exe, _ := os.Executable()
 	switch args[0] {
+	case "env":
+		values := map[string]string{}
+		for _, name := range args[1:] {
+			values[name] = os.Getenv(name)
+		}
+		data, _ := json.Marshal(values)
+		fmt.Println(string(data))
+		return
 	case "pwd":
 		dir, err := os.Getwd()
 		if err != nil {

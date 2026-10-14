@@ -25,6 +25,8 @@ type ExecSpec struct {
 	Executable ExecutableRole
 	Args       []string
 	Dir        string
+	// Env is host-owned. A non-nil value replaces inherited environment entirely.
+	Env []string
 }
 type ProcessStream string
 

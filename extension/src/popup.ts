@@ -71,17 +71,17 @@ export function mountPopup(document: Document, options: PopupOptions): { ready: 
     if (item) {
       fillOptions('item', state.analysis!.items.map(value => ({ value: value.itemId, label: value.title })), item.itemId);
       hide('item', state.analysis!.items.length === 1); hide('item-label', state.analysis!.items.length === 1);
-      text('media-title', item.title); text('media-detail', `${formatDuration(item.durationSeconds)} · ${item.hasAudio ? 'Com áudio' : 'Sem áudio'}`);
-      const audioAvailable = item.hasAudio && !!state.handshake?.capabilities.mp3;
+      text('media-title', item.title); text('media-detail', `${formatDuration(item.durationSeconds)} · ${item.hasAudio ? 'Com áudio' : item.audioUnknown ? 'Áudio a confirmar após baixar' : 'Sem áudio'}`);
+      const audioAvailable = !!(item.hasAudio || item.audioUnknown) && !!state.handshake?.capabilities.mp3;
       disable('mode-mp3', !audioAvailable || !!pending);
       disable('mode-video', !state.handshake?.capabilities.video || !!pending);
       el('mode-video').setAttribute('aria-pressed', String(state.mode === 'video')); el('mode-mp3').setAttribute('aria-pressed', String(state.mode === 'mp3'));
-      hide('mp3-reason', audioAvailable); text('mp3-reason', item.hasAudio ? 'MP3 indisponível: confira o encoder e as dependências do pacote.' : 'Este vídeo não tem áudio. MP3 indisponível.');
+      hide('mp3-reason', audioAvailable); text('mp3-reason', item.hasAudio || item.audioUnknown ? 'MP3 indisponível: confira o encoder e as dependências do pacote.' : 'Este vídeo não tem áudio. MP3 indisponível.');
       hide('video-settings', state.mode !== 'video'); hide('mp3-settings', state.mode !== 'mp3');
       fillOptions('quality', [{ value: '', label: 'Selecione uma qualidade' }, ...item.videoChoices.map(choice => ({ value: choice.optionId, label: choiceLabel(choice) }))], state.videoOptionId);
       const choice = item.videoChoices.find(value => value.optionId === state.videoOptionId);
       const expired = new Date(state.analysis!.expiresAt).getTime() <= Date.now();
-      text('quality-note', expired ? errorLabels.ANALYSIS_EXPIRED : choice ? `${choice.container === 'webm' ? 'WebM' : choice.container.toUpperCase()} · ${choice.videoCodec}${choice.audioCodec ? ` / ${choice.audioCodec}` : ''}. ${choice.hasAudio ? 'Sem redução silenciosa de resolução.' : 'A saída não contém áudio.'}` : item.videoChoices.length ? 'Não há qualidade conhecida até 1080p nesta lista: escolha uma opção para continuar.' : 'Nenhum formato de vídeo disponível.');
+      text('quality-note', expired ? errorLabels.ANALYSIS_EXPIRED : choice ? `${choice.container === 'webm' ? 'WebM' : choice.container.toUpperCase()} · ${choice.videoCodec === 'unknown' ? 'codec a confirmar' : choice.videoCodec}${choice.audioCodec ? ` / ${choice.audioCodec}` : ''}. ${choice.hasAudio ? 'Sem redução silenciosa de resolução.' : choice.audioUnknown ? 'Áudio confirmado no arquivo baixado.' : 'A saída não contém áudio.'}` : item.videoChoices.length ? 'Não há qualidade conhecida até 1080p nesta lista: escolha uma opção para continuar.' : 'Nenhum formato de vídeo disponível.');
       if (item.omittedMetadata || state.analysis!.omittedMetadata) text('quality-note', `${el('quality-note').textContent} Alguns metadados não foram fornecidos.`);
       el<HTMLSelectElement>('bitrate').value = String(state.bitrateKbps);
       hide('more-formats', !item.formatsCursor); disable('more-formats', !!pending);

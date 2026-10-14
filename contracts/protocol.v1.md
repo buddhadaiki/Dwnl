@@ -50,3 +50,5 @@ The host acknowledges the same start identity; a later event reports this stage'
 ```
 
 Each line above is a separate frame. Unknown totals omit percent. An old cached active job needs status/reconcile confirmation before the UI treats it as current.
+
+Native extractors may return unknown codecs or audio presence. `videoCodec: "unknown"` means that local ffprobe must confirm the codec after download. Optional `audioUnknown: true` on an item or choice distinguishes unknown audio from confirmed silence; `hasAudio` remains false until positive source evidence. MP3 can be attempted for unknown audio, but must return `NO_AUDIO` if local readback finds no audio stream. Video processing resolves the flag from the actual downloaded streams before muxing. This does not authorize a fallback format or invent source bitrate.

@@ -18,6 +18,9 @@ import (
 type Config struct {
 	HostSessionID string
 	Runner        ports.ProcessRunner
+	PrivateBinDir string
+	AnalysisRoot  string
+	NetworkTrace  func(string)
 }
 type Engine struct {
 	config       Config
@@ -35,6 +38,7 @@ type localAnalysis struct {
 	probe    mediaProbe
 	audio    mediaProbe
 	proofs   []fileProof
+	online   *onlineAnalysis
 }
 type LocalMedia struct {
 	VideoPath string
@@ -78,12 +82,7 @@ func (e *Engine) Analyze(ctx context.Context, raw string) (contracts.Analysis, e
 	if err := ctx.Err(); err != nil {
 		return contracts.Analysis{}, err
 	}
-	if _, err := CanonicalSourceURL(raw); err != nil {
-		return contracts.Analysis{}, err
-	}
-	// ProcessRunner is a subprocess boundary, not a per-request transport. Do not
-	// start yt-dlp until every extractor/CDN/redirect connection can be constrained.
-	return contracts.Analysis{}, protocolError(contracts.NetworkPolicyBlocked, "Platform access is unavailable because the extractor network policy cannot be enforced.")
+	return e.analyzeOnline(ctx, raw)
 }
 func (e *Engine) run(ctx context.Context, spec ports.ExecSpec, line func(ports.ProcessLine)) error {
 	if err := ctx.Err(); err != nil {

@@ -388,12 +388,15 @@ func (v *validator) protocolError(value any) {
 	v.boolean(m["retryable"])
 }
 func (v *validator) videoChoice(value any) string {
-	m := v.object(value, "optionId container videoCodec hasAudio sizeEstimated", "width height audioCodec sizeBytes")
+	m := v.object(value, "optionId container videoCodec hasAudio sizeEstimated", "width height audioCodec sizeBytes audioUnknown")
 	id := v.id(m["optionId"])
 	v.enum(m["container"], "mp4 webm mkv")
 	v.text(m["videoCodec"], 512)
 	v.optionalText(m, "audioCodec", 512)
 	v.boolean(m["hasAudio"])
+	if has(m, "audioUnknown") {
+		v.boolean(m["audioUnknown"])
+	}
 	v.boolean(m["sizeEstimated"])
 	if m["hasAudio"] == false && has(m, "audioCodec") {
 		v.fail(InvalidMessage, "Audio codec requires source audio")
@@ -422,10 +425,13 @@ func (v *validator) videoChoices(value any) {
 	}
 }
 func (v *validator) mediaItem(value any) string {
-	m := v.object(value, "itemId title hasAudio videoChoices omittedMetadata", "durationSeconds formatsCursor")
+	m := v.object(value, "itemId title hasAudio videoChoices omittedMetadata", "durationSeconds formatsCursor audioUnknown")
 	id := v.id(m["itemId"])
 	v.text(m["title"], 4096)
 	v.boolean(m["hasAudio"])
+	if has(m, "audioUnknown") {
+		v.boolean(m["audioUnknown"])
+	}
 	v.videoChoices(m["videoChoices"])
 	v.boolean(m["omittedMetadata"])
 	v.optionalID(m, "formatsCursor")
@@ -682,7 +688,7 @@ func ValidateRequestContext(request Request, ctx ValidationContext) error {
 			return nil
 		}
 		if payload.Mode == ModeMP3 {
-			if !item.HasAudio {
+			if !item.HasAudio && !item.AudioUnknown {
 				return &ProtocolDecodeError{NoAudio, "Item has no source audio"}
 			}
 			return nil

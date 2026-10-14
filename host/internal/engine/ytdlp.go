@@ -25,6 +25,9 @@ func ValidateExecSpec(s ports.ExecSpec) error {
 		if slices.Equal(a, ytdlpVersionArgs) {
 			return nil
 		}
+		if validateOnlineSpec(s) {
+			return nil
+		}
 		return bad()
 	case ports.Deno:
 		if slices.Equal(a, []string{"--version"}) {
@@ -157,9 +160,25 @@ func (e *Engine) Probe(ctx context.Context) error {
 			firstErr = err
 		}
 	}
+	network := false
+	if available[string(ports.YTDLP)] && available[string(ports.Deno)] && filepath.IsAbs(e.config.PrivateBinDir) && filepath.IsAbs(e.config.AnalysisRoot) {
+		dir, cleanup, err := e.onlineWork(e.config.AnalysisRoot)
+		if err == nil {
+			args := append(onlineArgs(dir, e.config.PrivateBinDir), "--extractor-args", "dwnl:mode=probe", "--skip-download", "--", "https://www.youtube.com/watch?v=dwnl-private-self-test")
+			var output string
+			output, err = e.capture(ctx, ports.ExecSpec{Executable: ports.YTDLP, Args: args, Dir: dir, Env: onlineEnvironment(dir, e.config.PrivateBinDir)})
+			network = err == nil && strings.Contains(output, "DWNL_ADAPTER_READY")
+			if !isCancelFailure(err) {
+				cleanup()
+			}
+		}
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
 	e.mu.Lock()
 	e.dependencies = deps
-	e.capabilities = contracts.Capabilities{Video: video, MP3: mp3, NetworkAccess: false}
+	e.capabilities = contracts.Capabilities{Video: video, MP3: mp3, NetworkAccess: network}
 	e.mu.Unlock()
 	return firstErr
 }

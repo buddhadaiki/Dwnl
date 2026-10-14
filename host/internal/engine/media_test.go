@@ -31,6 +31,7 @@ func (r *realRunner) Run(ctx context.Context, s ports.ExecSpec, emit func(ports.
 	r.specs = append(r.specs, s)
 	cmd := exec.CommandContext(ctx, filepath.Join(r.bin, string(s.Executable)+".exe"), s.Args...)
 	cmd.Dir = s.Dir
+	cmd.Env = s.Env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -389,7 +390,7 @@ func (r *processRunner) Run(ctx context.Context, spec ports.ExecSpec, callback f
 		result.Canceled = true
 		return result, err
 	}
-	process, err := createSuspendedProcess(job, appName, commandLine, currentDir, inherited)
+	process, err := createSuspendedProcessWithEnv(job, appName, commandLine, currentDir, inherited, spec.Env)
 	if err != nil {
 		return result, fmt.Errorf("create private process: %w", err)
 	}
@@ -525,6 +526,10 @@ func (r *processRunner) Run(ctx context.Context, spec ports.ExecSpec, callback f
 }
 
 func createSuspendedProcess(job win.Handle, appName *uint16, commandLine []uint16, currentDir *uint16, inherited []win.Handle) (win.ProcessInformation, error) {
+	return createSuspendedProcessWithEnv(job, appName, commandLine, currentDir, inherited, nil)
+}
+
+func createSuspendedProcessWithEnv(job win.Handle, appName *uint16, commandLine []uint16, currentDir *uint16, inherited []win.Handle, environment []string) (win.ProcessInformation, error) {
 	var process win.ProcessInformation
 	attributes, err := win.NewProcThreadAttributeList(2)
 	if err != nil {
@@ -549,7 +554,32 @@ func createSuspendedProcess(job win.Handle, appName *uint16, commandLine []uint1
 	// The explicit application name prevents PATH/current-directory resolution.
 	// HANDLE_LIST prevents inheriting any handle besides the three stdio handles.
 	flags := uint32(win.CREATE_SUSPENDED | win.CREATE_NO_WINDOW | win.EXTENDED_STARTUPINFO_PRESENT)
-	err = win.CreateProcess(appName, &commandLine[0], nil, nil, true, flags, nil, currentDir, &startup.StartupInfo, &process)
+	var envPointer *uint16
+	var envBlock []uint16
+	if environment != nil {
+		seen := map[string]bool{}
+		ordered := append([]string(nil), environment...)
+		sort.Slice(ordered, func(i, j int) bool { return strings.ToUpper(ordered[i]) < strings.ToUpper(ordered[j]) })
+		for _, entry := range ordered {
+			key, _, ok := strings.Cut(entry, "=")
+			if !ok || key == "" || strings.ContainsRune(entry, 0) || seen[strings.ToUpper(key)] {
+				return process, errors.New("invalid explicit process environment")
+			}
+			seen[strings.ToUpper(key)] = true
+			value, envErr := win.UTF16FromString(entry)
+			if envErr != nil {
+				return process, envErr
+			}
+			envBlock = append(envBlock, value...)
+		}
+		envBlock = append(envBlock, 0)
+		if len(envBlock) == 1 {
+			envBlock = append(envBlock, 0)
+		}
+		envPointer = &envBlock[0]
+		flags |= win.CREATE_UNICODE_ENVIRONMENT
+	}
+	err = win.CreateProcess(appName, &commandLine[0], nil, nil, true, flags, envPointer, currentDir, &startup.StartupInfo, &process)
 	return process, err
 }
 

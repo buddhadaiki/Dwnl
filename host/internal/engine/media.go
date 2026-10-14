@@ -155,7 +155,7 @@ func (p mediaProbe) duration() float64 {
 }
 
 // ImportLocal is a trusted host-tool/test API, never a browser operation. It
-// imports authorized local fixtures; Analyze always keeps real sites blocked.
+// imports authorized local fixtures independently of online extraction.
 func (e *Engine) ImportLocal(ctx context.Context, sourceURL string, media LocalMedia) (contracts.Analysis, error) {
 	canonical, err := CanonicalSourceURL(sourceURL)
 	if err != nil {
@@ -254,7 +254,17 @@ func (e *Engine) selection(plan contracts.DownloadPlan) (localAnalysis, *contrac
 	if err != nil || !time.Now().Before(expires) {
 		return empty, nil, protocolError(contracts.AnalysisExpired, "The media analysis expired. Analyze it again.")
 	}
-	item := stored.analysis.Items[0]
+	var item contracts.MediaItem
+	for _, candidate := range stored.analysis.Items {
+		if candidate.ItemID == plan.Item.ItemID {
+			item = candidate
+			break
+		}
+	}
+	if item.ItemID == "" {
+		return empty, nil, protocolError(contracts.InvalidSelection, "The selected item does not belong to this analysis.")
+	}
+	stored.analysis.Items = []contracts.MediaItem{item}
 	if plan.Analysis.SourceURL != stored.analysis.SourceURL || plan.Item.ItemID != item.ItemID || plan.JobID == "" || plan.DestinationID == "" {
 		return empty, nil, protocolError(contracts.InvalidSelection, "The selected item does not belong to this analysis.")
 	}
@@ -262,7 +272,7 @@ func (e *Engine) selection(plan contracts.DownloadPlan) (localAnalysis, *contrac
 		if plan.VideoChoice != nil || !(plan.MP3BitrateKbps == 128 || plan.MP3BitrateKbps == 192 || plan.MP3BitrateKbps == 320) {
 			return empty, nil, protocolError(contracts.InvalidSelection, "Choose an available MP3 output rate.")
 		}
-		if !item.HasAudio {
+		if !item.HasAudio && !item.AudioUnknown {
 			return empty, nil, protocolError(contracts.NoAudio, "The selected media has no source audio.")
 		}
 		if !e.Capabilities().MP3 {
@@ -304,6 +314,22 @@ func (e *Engine) Execute(ctx context.Context, plan contracts.DownloadPlan, emit 
 	if filepath.Clean(plan.WorkDir) == filepath.Clean(plan.DestinationPath) {
 		return empty, protocolError(contracts.DestinationError, "The destination must be separate from the private job directory.")
 	}
+	cleanupSafe := true
+	if stored.online != nil {
+		var cleanup func()
+		stored, cleanup, err = e.downloadOnline(ctx, stored, choice, plan, emit)
+		if err != nil {
+			return empty, err
+		}
+		defer func() {
+			if cleanupSafe {
+				cleanup()
+			}
+		}()
+		if err = validateSources(ctx, stored.proofs); err != nil {
+			return empty, err
+		}
+	}
 	private, err := os.MkdirTemp(plan.WorkDir, "media-")
 	if err != nil {
 		return empty, fileError(err)
@@ -320,7 +346,6 @@ func (e *Engine) Execute(ctx context.Context, plan contracts.DownloadPlan, emit 
 		stage = contracts.StateMuxing
 	}
 	output := filepath.Join(private, "processed."+format)
-	cleanupSafe := true
 	defer func() {
 		if !cleanupSafe {
 			return
@@ -465,13 +490,13 @@ func validateMediaOutput(p mediaProbe, choice *contracts.VideoChoice, bitrate in
 		}
 		return nil
 	}
-	if v == nil || v.CodecName != choice.VideoCodec || choice.HasAudio != (a != nil) {
+	if v == nil || v.CodecName != probeCodec(choice.VideoCodec) || choice.HasAudio != (a != nil) {
 		return invalid()
 	}
 	if choice.Width != nil && v.Width != *choice.Width || choice.Height != nil && v.Height != *choice.Height {
 		return invalid()
 	}
-	if a != nil && a.CodecName != choice.AudioCodec {
+	if a != nil && a.CodecName != probeCodec(choice.AudioCodec) {
 		return invalid()
 	}
 	if a != nil {

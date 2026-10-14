@@ -94,6 +94,31 @@ func fixtureBin(t *testing.T) string {
 	return dir
 }
 
+func TestRunnerExplicitEnvironmentDoesNotInheritDenoPermissionBroker(t *testing.T) {
+	t.Setenv("DENO_PERMISSION_BROKER_PATH", "inherited-untrusted-broker")
+	bin := fixtureBin(t)
+	runner, err := NewRunner(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output string
+	result, err := runner.Run(context.Background(), ports.ExecSpec{Executable: ports.YTDLP, Dir: bin, Args: fixtureArgs("env", "DENO_PERMISSION_BROKER_PATH", "DWNL_FIXTURE_VALUE"), Env: []string{"SYSTEMROOT=" + os.Getenv("SYSTEMROOT"), "DWNL_FIXTURE_VALUE=ação-東京"}}, func(line ports.ProcessLine) {
+		if line.Stream == ports.Stdout {
+			output = line.Text
+		}
+	})
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("run %+v %v", result, err)
+	}
+	var values map[string]string
+	if err = json.Unmarshal([]byte(output), &values); err != nil {
+		t.Fatal(err)
+	}
+	if values["DENO_PERMISSION_BROKER_PATH"] != "" || values["DWNL_FIXTURE_VALUE"] != "ação-東京" {
+		t.Fatalf("inherited or corrupted environment: %+v", values)
+	}
+}
+
 func TestRunnerRunsFixedRoleWithLiteralArgumentsAndBothStreams(t *testing.T) {
 	bin := fixtureBin(t)
 	runner, err := NewRunner(bin)

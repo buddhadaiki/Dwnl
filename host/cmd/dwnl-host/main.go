@@ -38,11 +38,11 @@ func run() error {
 		return err
 	}
 	sessionID := runtime.NewID()
-	media, err := engine.New(engine.Config{HostSessionID: sessionID, Runner: runner})
+	stateRoot, defaultPath, err := windows.DefaultPaths()
 	if err != nil {
 		return err
 	}
-	stateRoot, defaultPath, err := windows.DefaultPaths()
+	media, err := engine.New(engine.Config{HostSessionID: sessionID, Runner: runner, PrivateBinDir: filepath.Join(filepath.Dir(executable), "bin"), AnalysisRoot: filepath.Join(stateRoot, "analyses")})
 	if err != nil {
 		return err
 	}

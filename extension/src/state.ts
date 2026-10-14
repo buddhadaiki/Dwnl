@@ -21,7 +21,7 @@ export function chooseBestVideo(choices: VideoChoice[]): VideoChoice | undefined
 export function selectItem(state: AppState, itemId: string): AppState {
   const item = state.analysis?.items.find(value => value.itemId === itemId);
   if (!item) return state;
-  return { ...state, selectedItemId: itemId, videoOptionId: chooseBestVideo(item.videoChoices)?.optionId, mode: item.hasAudio ? state.mode : 'video' };
+  return { ...state, selectedItemId: itemId, videoOptionId: chooseBestVideo(item.videoChoices)?.optionId, mode: item.hasAudio || item.audioUnknown ? state.mode : 'video' };
 }
 function applySnapshot(state: AppState, snapshot: JobSnapshot, authoritative = false): AppState {
   if (isTerminal(snapshot.state) && state.clearedJob?.hostSessionId === snapshot.hostSessionId && state.clearedJob.jobId === snapshot.jobId) return { ...state, job: state.job?.jobId === snapshot.jobId ? undefined : state.job, confirmation: state.pendingStartRequestId ? 'checking' : 'confirmed' };
