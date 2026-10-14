@@ -2,7 +2,7 @@
 
 Protótipo pessoal para Windows: uma extensão Chrome Manifest V3 em TypeScript controla um auxiliar Go por Native Messaging. O auxiliar usa cópias privadas de yt-dlp, Deno, FFmpeg e ffprobe. Não há backend, serviço ou telemetria.
 
-O núcleo local está implementado e revisado. A integração stdio gera mídia sintética real; os builds passaram. A última suíte Go tem uma pendência de limpeza NTFS de fixture, detalhada nas evidências. A extração online permanece desativada: o adaptador atual não consegue garantir a política de rede em todas as requisições do extrator, incluindo CDNs e redirecionamentos. Nenhuma das quatro plataformas está validada pelo produto.
+O núcleo local está implementado e revisado. A integração stdio gera mídia sintética real; os builds passaram. A limpeza transitória das fixtures NTFS recebeu uma correção limitada aos testes, verificada nos pacotes afetados. A extração online permanece desativada: o adaptador atual não consegue garantir a política de rede em todas as requisições do extrator, incluindo CDNs e redirecionamentos. Nenhuma das quatro plataformas está validada pelo produto.
 
 ## Desenvolvimento local
 
@@ -42,3 +42,5 @@ O build da extensão fica em `dist/extension/`, e o auxiliar em `dist/helper/`. 
 Não houve instalação do Dwnl, registro de Native Messaging, carregamento em Chrome, publicação ou push. A validação real de instalação/Chrome depende de autorização específica. Downloads reais dependem também de uma solução aprovada para o gate de rede e de casos cujo conteúdo e método tenham autorização adequada; DRM e controles de acesso não serão contornados.
 
 Consulte [as evidências de validação](docs/validation/2026-10-13-prototype.md), [a especificação aprovada](docs/superpowers/specs/2026-10-13-dwnl-design.md) e [o plano](docs/superpowers/plans/2026-10-13-dwnl-implementation-plan.md). Esses documentos distinguem comportamento pretendido de resultados efetivamente comprovados.
+
+A [retomada de 14/10](docs/validation/2026-10-14-recovery.md) registra o diagnóstico NTFS, o bloqueio exato das quatro plataformas e a prova de aquisição do FFmpeg 9.0.2 Gyan. O script `tools/probe-supplier.ps1` baixa e testa essa alternativa em `.tools/supplier-proof/`; ele requer rede, não é um instalador e não substitui as dependências produtivas.

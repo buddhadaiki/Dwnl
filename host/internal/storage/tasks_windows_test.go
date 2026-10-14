@@ -1,7 +1,9 @@
 package storage
 
 import (
+	"dwnl/host/internal/testutil"
 	"encoding/binary"
+	"errors"
 	win "golang.org/x/sys/windows"
 	"os"
 	"path/filepath"
@@ -33,7 +35,16 @@ func makeJunction(t *testing.T, path, target string) {
 		binary.LittleEndian.PutUint16(data[16+i*2:], value)
 	}
 	var returned uint32
-	if err = win.DeviceIoControl(h, win.FSCTL_SET_REPARSE_POINT, &data[0], uint32(len(data)), nil, 0, &returned, nil); err != nil {
+	retried := false
+	err = testutil.RetryDirectoryNotEmpty(func() error {
+		attemptErr := win.DeviceIoControl(h, win.FSCTL_SET_REPARSE_POINT, &data[0], uint32(len(data)), nil, 0, &returned, nil)
+		if errors.Is(attemptErr, win.ERROR_DIR_NOT_EMPTY) && !retried {
+			t.Log("retrying transient ERROR_DIR_NOT_EMPTY while creating the pinned junction fixture")
+			retried = true
+		}
+		return attemptErr
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Remove(path) })
@@ -88,7 +99,7 @@ func TestCleanupOwnedNestedFilesAndPreservesFinal(t *testing.T) {
 	}
 }
 func TestExactIntermediateCleanupPreservesReplacement(t *testing.T) {
-	destination := t.TempDir()
+	destination := testutil.TempDir(t)
 	f, owned, err := CreateIntermediate(destination, "owned-job")
 	if err != nil {
 		t.Fatal(err)

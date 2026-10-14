@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"dwnl/host/internal/testutil"
 	"errors"
 	"os"
 	"path/filepath"
@@ -37,7 +38,7 @@ func requireContents(t *testing.T, path, want string) {
 }
 
 func TestPublishExactIntermediateWithUnicodeDestination(t *testing.T) {
-	destination := filepath.Join(t.TempDir(), "Downloads-ação-東京")
+	destination := filepath.Join(testutil.TempDir(t), "Downloads-ação-東京")
 	if err := os.Mkdir(destination, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +57,7 @@ func TestPublishExactIntermediateWithUnicodeDestination(t *testing.T) {
 	}
 }
 func TestPublishNeverOverwritesExistingTargetAndCanRetry(t *testing.T) {
-	destination := t.TempDir()
+	destination := testutil.TempDir(t)
 	owned := createClosedPartial(t, destination, "collision-job", "owned media")
 	final := filepath.Join(destination, "existing.mp4")
 	if err := os.WriteFile(final, []byte("user media"), 0600); err != nil {
@@ -75,7 +76,7 @@ func TestPublishNeverOverwritesExistingTargetAndCanRetry(t *testing.T) {
 	requireContents(t, final, "user media")
 }
 func TestPublishRejectsReplacedIntermediateWithoutMovingIt(t *testing.T) {
-	destination := t.TempDir()
+	destination := testutil.TempDir(t)
 	owned := createClosedPartial(t, destination, "replacement-job", "owned original")
 	original := owned.Path + ".original"
 	if err := os.Rename(owned.Path, original); err != nil {
@@ -95,7 +96,7 @@ func TestPublishRejectsReplacedIntermediateWithoutMovingIt(t *testing.T) {
 	}
 }
 func TestPublishRejectsDestinationOutsideApprovedParent(t *testing.T) {
-	base := t.TempDir()
+	base := testutil.TempDir(t)
 	approved := filepath.Join(base, "approved")
 	outside := filepath.Join(base, "outside")
 	if err := os.Mkdir(approved, 0700); err != nil {
@@ -115,7 +116,7 @@ func TestPublishRejectsDestinationOutsideApprovedParent(t *testing.T) {
 	}
 }
 func TestPublishRejectsReplacedParentEvenWhenSourceIdentityMatches(t *testing.T) {
-	base := t.TempDir()
+	base := testutil.TempDir(t)
 	destination := filepath.Join(base, "approved")
 	if err := os.Mkdir(destination, 0700); err != nil {
 		t.Fatal(err)
@@ -149,7 +150,7 @@ func TestPublishRejectsReplacedParentEvenWhenSourceIdentityMatches(t *testing.T)
 	}
 }
 func TestPublishRejectsJunctionParentAndPreservesOutsideFiles(t *testing.T) {
-	base := t.TempDir()
+	base := testutil.TempDir(t)
 	destination := filepath.Join(base, "approved")
 	outside := filepath.Join(base, "outside")
 	if err := os.Mkdir(destination, 0700); err != nil {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"dwnl/host/internal/contracts"
 	"dwnl/host/internal/storage"
+	"dwnl/host/internal/testutil"
 	"encoding/hex"
 	"errors"
 	"os"
@@ -63,7 +64,7 @@ func (e *journalEngine) Execute(_ context.Context, p contracts.DownloadPlan, pro
 
 func TestStartSuppliesDurablePreparationAndLaterWritesPreserveIt(t *testing.T) {
 	e := &journalEngine{done: make(chan error, 1)}
-	s := newTestSession(t, e, filepath.Join(t.TempDir(), "state"))
+	s := newTestSession(t, e, filepath.Join(testutil.TempDir(t), "state"))
 	e.store = s.options.Store
 	response := s.Handle(context.Background(), analyzeStart(t, s, "prepare-start"))
 	if response.Error != nil {
@@ -88,7 +89,7 @@ func TestStartSuppliesDurablePreparationAndLaterWritesPreserveIt(t *testing.T) {
 func TestReconcilePreparedCrashWindowAndPhysicalReplacement(t *testing.T) {
 	for _, scenario := range []string{"crash", "replacement nonterminal", "replacement terminal", "absent canceled", "tampered failed"} {
 		t.Run(scenario, func(t *testing.T) {
-			base := t.TempDir()
+			base := testutil.TempDir(t)
 			s := newTestSession(t, &blockingEngine{begun: make(chan struct{})}, filepath.Join(base, "state"))
 			destination := filepath.Join(base, "approved")
 			if err := os.Mkdir(destination, 0700); err != nil {
@@ -191,7 +192,7 @@ func TestReconcilePreparedCrashWindowAndPhysicalReplacement(t *testing.T) {
 }
 
 func TestChooseDestinationPersistsApprovedPathAndFreshSessionID(t *testing.T) {
-	base := t.TempDir()
+	base := testutil.TempDir(t)
 	chosen, fallback := filepath.Join(base, "chosen"), filepath.Join(base, "downloads")
 	if err := os.Mkdir(chosen, 0700); err != nil {
 		t.Fatal(err)

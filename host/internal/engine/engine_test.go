@@ -23,12 +23,17 @@ func code(t *testing.T, err error, want contracts.ErrorCode) {
 	}
 }
 func TestNetworkAnalysisBlockedBeforeAnySubprocess(t *testing.T) {
-	r := &neverRunner{}
-	e, _ := New(Config{HostSessionID: "session", Runner: r})
-	_, err := e.Analyze(context.Background(), "https://youtu.be/owned-fixture")
-	code(t, err, contracts.NetworkPolicyBlocked)
-	if r.calls != 0 || e.Capabilities().NetworkAccess {
-		t.Fatal("blocked analysis invoked a process or advertised network")
+	for _, raw := range []string{"https://youtu.be/owned-fixture", "https://www.instagram.com/reel/owned-fixture/", "https://www.tiktok.com/@owned-fixture/video/123", "https://x.com/owned-fixture/status/123"} {
+		t.Run(raw, func(t *testing.T) {
+			r := &neverRunner{}
+			e, _ := New(Config{HostSessionID: "session", Runner: r})
+			_, err := e.Analyze(context.Background(), raw)
+			code(t, err, contracts.NetworkPolicyBlocked)
+			if r.calls != 0 || e.Capabilities().NetworkAccess {
+				t.Fatal("blocked analysis invoked a process or advertised network")
+			}
+			t.Logf("error=%v; subprocessCalls=%d; networkAccess=%t; no site request attempted", err, r.calls, e.Capabilities().NetworkAccess)
+		})
 	}
 }
 func TestCanonicalSourceURLExactHosts(t *testing.T) {

@@ -113,7 +113,7 @@ Código de produto congelado em `60d3e07cf6148b811230b39cd6dde7e22043bc6b`; o co
 | Regressões específicas do guard UTF-8 | Ledger e preferência passaram, exit 0, 0,656 s. |
 | Revisão independente | Sete achados fechados; nenhum achado de código remanescente. A revisão conserva a pendência da suíte Go. |
 
-Na última suíte Go, `TestPublishRejectsReplacedIntermediateWithoutMovingIt` passou nas verificações de preservação e falhou em `testing.go:1619`, durante `TempDir RemoveAll`, com “diretório não vazio”. O problema também apareceu em outras fixtures de substituição; uma inspeção posterior encontrou um diretório vazio e nenhum processo Go ativo. A causa não foi isolada. Um overlay que alterava apenas nomes de arquivos sintéticos não resolveu e não foi aplicado às fontes. Não houve reescrita da limpeza de produção, relaxamento de asserts, exclusão ampla ou alteração de segurança. **A última suíte Go não está integralmente aprovada**; o pass anterior não substitui esse resultado.
+No checkpoint de 13/10, `TestPublishRejectsReplacedIntermediateWithoutMovingIt` passou nas verificações de preservação e falhou em `testing.go:1619`, durante `TempDir RemoveAll`, com “diretório não vazio”. A execução global acima conserva esse resultado. A [retomada de 14/10](2026-10-14-recovery.md) reproduziu a falha, mediu handles e nomes temporários, corrigiu a limpeza e o preparo das fixtures com retry específico e finito, e verificou somente os pacotes afetados. A autoria dos nomes temporários continua desconhecida. Nenhuma limpeza produtiva ou asserção de preservação foi alterada, e a suíte global não foi repetida.
 
 Os relatórios locais em `.superpowers/sdd/dwnl-prototype` preservam comandos, ciclos RED/GREEN, ownership e checkpoints recuperáveis.
 

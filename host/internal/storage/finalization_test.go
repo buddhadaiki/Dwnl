@@ -3,6 +3,7 @@ package storage
 import (
 	"crypto/sha256"
 	"dwnl/host/internal/contracts"
+	"dwnl/host/internal/testutil"
 	hostwin "dwnl/host/internal/windows"
 	"encoding/hex"
 	"encoding/json"
@@ -21,7 +22,7 @@ func savingRecord() Record {
 
 func preparedFixture(t *testing.T) (*Store, Record, OwnedIntermediate, contracts.PreparedFinalization) {
 	t.Helper()
-	base := t.TempDir()
+	base := testutil.TempDir(t)
 	s, err := Open(filepath.Join(base, "state"))
 	if err != nil {
 		t.Fatal(err)
