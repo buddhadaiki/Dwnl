@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"dwnl/host/internal/contracts"
 	"dwnl/host/internal/storage"
+	"dwnl/host/internal/testutil"
 	"encoding/hex"
 	"os"
 	"path/filepath"
@@ -73,7 +74,7 @@ func TestFinalizeRejectsSubstitutedIntermediateAndDestination(t *testing.T) {
 			name = "directory"
 		}
 		t.Run(name, func(t *testing.T) {
-			root := t.TempDir()
+			root := testutil.TempDir(t)
 			destination := filepath.Join(root, "approved")
 			if err := os.Mkdir(destination, 0700); err != nil {
 				t.Fatal(err)
@@ -105,7 +106,7 @@ func TestFinalizeRejectsSubstitutedIntermediateAndDestination(t *testing.T) {
 }
 func publishedFixture(t *testing.T) (storage.OwnedIntermediate, os.FileInfo, int64, string, string) {
 	t.Helper()
-	destination := t.TempDir()
+	destination := testutil.TempDir(t)
 	f, owned, err := storage.CreateIntermediate(destination, "proof-job")
 	if err != nil {
 		t.Fatal(err)

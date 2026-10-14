@@ -233,9 +233,13 @@ func audioFormat(formats []extractedFormat) string {
 	rate := -1.0
 	for _, audioOnly := range []bool{true, false} {
 		for _, f := range formats {
-			if !f.DRM && hasCodec(f.ACodec) && hasCodec(f.VCodec) != audioOnly && f.ABR > rate {
+			bitrate := f.ABR
+			if bitrate <= 0 && !hasCodec(f.VCodec) {
+				bitrate = f.TBR
+			}
+			if !f.DRM && hasCodec(f.ACodec) && hasCodec(f.VCodec) != audioOnly && bitrate > rate {
 				best = f.ID
-				rate = f.ABR
+				rate = bitrate
 			}
 		}
 		if best != "" {
@@ -304,7 +308,7 @@ func (e *Engine) analyzeOnline(ctx context.Context, raw string) (contracts.Analy
 			index++
 			choice.OptionID = newID()
 			selectedAudio := audio
-			if hasCodec(f.ACodec) {
+			if selectedAudio == "" && hasCodec(f.ACodec) {
 				selectedAudio = f.ID
 			}
 			remote.Choices[choice.OptionID] = remotePick{VideoID: f.ID, AudioID: selectedAudio}
@@ -370,6 +374,17 @@ func (e *Engine) downloadOnline(ctx context.Context, stored localAnalysis, choic
 			return stored, nil, err
 		}
 		guard := map[string]any{"id": remote.ID, "duration": remote.Record.Duration, "format": format, "budget_bytes": 5*1024*1024*1024 - total}
+		if e.config.NetworkTrace != nil {
+			rate := format.ABR
+			if rate <= 0 && !hasCodec(format.VCodec) {
+				rate = format.TBR
+			}
+			label := "unknown"
+			if rate > 0 {
+				label = strconv.FormatFloat(rate, 'f', -1, 64)
+			}
+			e.config.NetworkTrace("DWNL_SELECTION format=" + id + " reported_audio_kbps=" + label)
+		}
 		body, err := json.Marshal(guard)
 		if err == nil {
 			err = os.WriteFile(filepath.Join(dir, "selection.json"), body, 0600)

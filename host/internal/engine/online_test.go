@@ -159,7 +159,7 @@ func TestOnlineUnknownAudioIsConfirmedFromPhysicalFile(t *testing.T) {
 			local := mediaRunner(t)
 			media := generateFixture(t, local)
 			if withAudio {
-				merged := filepath.Join(t.TempDir(), "av.mp4")
+				merged := filepath.Join(testutil.TempDir(t), "av.mp4")
 				out, err := exec.Command(filepath.Join(local.bin, "ffmpeg.exe"), "-nostdin", "-v", "error", "-i", media.VideoPath, "-i", media.AudioPath, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", merged).CombinedOutput()
 				if err != nil {
 					t.Fatalf("fixture merge %v %s", err, out)
@@ -243,5 +243,42 @@ func TestMissingPrivateAdapterCannotFallBackToNativeSiteExtractor(t *testing.T) 
 	result, err := r.Run(ctx, ports.ExecSpec{Executable: ports.YTDLP, Dir: dir, Env: onlineEnvironment(dir, r.bin), Args: args}, func(line ports.ProcessLine) { output.WriteString(line.Text); output.WriteByte('\n') })
 	if err != nil || result.ExitCode == 0 || !strings.Contains(strings.ToLower(output.String()), "no suitable extractor") || strings.Contains(strings.ToLower(output.String()), "downloading webpage") || strings.Contains(output.String(), "DWNL_ADAPTER_READY") {
 		t.Fatalf("missing adapter did not fail closed: %v %+v %s", err, result, output.String())
+	}
+}
+func TestAudioSourceUsesKnownTotalBitrateForAudioOnlyVariants(t *testing.T) {
+	var item extractedItem
+	if err := json.Unmarshal([]byte(`{"formats":[{"format_id":"a32","vcodec":"none","acodec":"unknown","tbr":32},{"format_id":"a128","vcodec":"none","acodec":"unknown","tbr":128},{"format_id":"av2000","vcodec":"h264","acodec":"aac","tbr":2000}]}`), &item); err != nil {
+		t.Fatal(err)
+	}
+	if got := audioFormat(item.Formats); got != "a128" {
+		t.Fatalf("selected %s; highest reported audio-only bitrate is a128", got)
+	}
+}
+func TestVideoChoiceUsesBestSeparateAudioInsteadOfLowerProgressiveAudio(t *testing.T) {
+	raw := []byte(`{"entries":[{"id":"owned","title":"Public fixture","formats":[{"format_id":"combined","vcodec":"h264","acodec":"aac","abr":64},{"format_id":"best-audio","vcodec":"none","acodec":"opus","abr":128}]}]}`)
+	root := testutil.TempDir(t)
+	r := &metadataRunner{raw: raw}
+	e, _ := New(Config{HostSessionID: "session", Runner: r, PrivateBinDir: filepath.Join(root, "bin"), AnalysisRoot: filepath.Join(root, "analyses")})
+	a, err := e.Analyze(context.Background(), "https://x.com/owned/status/123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	choice := a.Items[0].VideoChoices[0]
+	pick := e.analyses[a.AnalysisID].online.Items[a.Items[0].ItemID].Choices[choice.OptionID]
+	if choice.AudioCodec != "opus" || choice.Container != "mkv" || pick.AudioID != "best-audio" {
+		t.Fatalf("lower progressive audio selected: choice=%+v privatePick=%+v", choice, pick)
+	}
+}
+func TestReplacedProgressiveAudioDoesNotExposeOriginalFormatSize(t *testing.T) {
+	for _, size := range []string{`"filesize":100000`, `"filesize_approx":100000`} {
+		raw := []byte(`{"id":"owned","title":"Public fixture","formats":[{"format_id":"combined","vcodec":"h264","acodec":"aac","abr":64,` + size + `},{"format_id":"best-audio","vcodec":"none","acodec":"opus","abr":128}]}`)
+		items, err := ParseMetadata(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		choice := items[0].VideoChoices[0]
+		if choice.SizeBytes != nil || choice.SizeEstimated {
+			t.Fatalf("size of original progressive format exposed after audio replacement: %+v", choice)
+		}
 	}
 }

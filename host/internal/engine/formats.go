@@ -19,6 +19,7 @@ type extractedFormat struct {
 	Size      float64 `json:"filesize"`
 	Estimated float64 `json:"filesize_approx"`
 	ABR       float64 `json:"abr"`
+	TBR       float64 `json:"tbr"`
 	DRM       bool    `json:"has_drm"`
 }
 type extractedItem struct {
@@ -127,7 +128,7 @@ func ParseMetadata(raw []byte) ([]contracts.MediaItem, error) {
 				continue
 			}
 			a := f.ACodec
-			if !hasCodec(a) {
+			if hasCodec(audio) {
 				a = audio
 			}
 			choice := contracts.VideoChoice{OptionID: fmt.Sprintf("option-%d", len(m.VideoChoices)+1), Container: containerFor(f.VCodec, a), VideoCodec: f.VCodec, HasAudio: hasCodec(a), Width: positiveUint(f.Width), Height: positiveUint(f.Height)}
@@ -143,7 +144,7 @@ func ParseMetadata(raw []byte) ([]contracts.MediaItem, error) {
 				choice.SizeBytes = positiveUint(f.Estimated)
 				choice.SizeEstimated = choice.SizeBytes != nil
 			}
-			if !hasCodec(f.ACodec) && hasCodec(a) {
+			if hasCodec(a) && bestAudio != f.ID {
 				choice.SizeBytes = nil
 				choice.SizeEstimated = false
 			}

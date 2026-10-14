@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"dwnl/host/internal/contracts"
 	"dwnl/host/internal/ports"
+	"dwnl/host/internal/testutil"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -76,7 +77,7 @@ func mediaRunner(t *testing.T) *realRunner {
 }
 func generateFixture(t *testing.T, r *realRunner) LocalMedia {
 	t.Helper()
-	dir := t.TempDir()
+	dir := testutil.TempDir(t)
 	video := filepath.Join(dir, "video.mp4")
 	audio := filepath.Join(dir, "audio.m4a")
 	for _, a := range [][]string{{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-f", "lavfi", "-i", "color=c=black:size=160x90:rate=25,drawbox=color=white:t=fill:enable='between(t,0.5,0.54)'", "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", video}, {"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-f", "lavfi", "-i", "aevalsrc=if(between(t\\,0.5\\,0.54)\\,0.3*sin(2*PI*1000*t)\\,0):s=44100", "-t", "2", "-c:a", "aac", audio}} {
@@ -159,7 +160,7 @@ func localPlan(t *testing.T, a contracts.Analysis, mode contracts.DownloadMode) 
 		c := a.Items[0].VideoChoices[0]
 		choice = &c
 	}
-	return contracts.DownloadPlan{RequestID: "start", HostSessionID: a.HostSessionID, JobID: "job", Analysis: a, Item: a.Items[0], Mode: mode, VideoChoice: choice, MP3BitrateKbps: 192, DestinationID: "destination", DestinationPath: t.TempDir(), WorkDir: t.TempDir()}
+	return contracts.DownloadPlan{RequestID: "start", HostSessionID: a.HostSessionID, JobID: "job", Analysis: a, Item: a.Items[0], Mode: mode, VideoChoice: choice, MP3BitrateKbps: 192, DestinationID: "destination", DestinationPath: testutil.TempDir(t), WorkDir: testutil.TempDir(t)}
 }
 func TestFixturesVideoStreamcopy(t *testing.T) {
 	e, r, a := fixtureEngine(t)
@@ -317,12 +318,12 @@ func TestAudioOnlyLocalFixture(t *testing.T) {
 	}
 }
 func TestReservedAndTraversalTitlesCannotEscapeDestination(t *testing.T) {
-	source := filepath.Join(t.TempDir(), "source")
+	source := filepath.Join(testutil.TempDir(t), "source")
 	if err := os.WriteFile(source, []byte("owned bytes"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, title := range []string{"CON", "NUL .txt", "COM¹", `../../escaped`, `C:\\absolute\\name`, "....", ""} {
-		dir := t.TempDir()
+		dir := testutil.TempDir(t)
 		result, err := finalize(context.Background(), source, dir, title, "mp4", "job", contracts.CompletedFile{}, nil)
 		if err != nil {
 			t.Fatalf("title %q: %v", title, err)
@@ -337,8 +338,8 @@ func TestReservedAndTraversalTitlesCannotEscapeDestination(t *testing.T) {
 	}
 }
 func TestDestinationNoOverwriteAndOwnedIntermediate(t *testing.T) {
-	dir := t.TempDir()
-	sourceDir := t.TempDir()
+	dir := testutil.TempDir(t)
+	sourceDir := testutil.TempDir(t)
 	source := filepath.Join(sourceDir, "source.bin")
 	if err := os.WriteFile(source, []byte("new media bytes"), 0600); err != nil {
 		t.Fatal(err)
@@ -465,8 +466,8 @@ func TestUnconfirmedTerminationKeepsOwnedIntermediate(t *testing.T) {
 func TestFinalizeCanceledDoesNotPublish(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	dir := t.TempDir()
-	source := filepath.Join(t.TempDir(), "source")
+	dir := testutil.TempDir(t)
+	source := filepath.Join(testutil.TempDir(t), "source")
 	_ = os.WriteFile(source, []byte("bytes"), 0600)
 	_, err := finalize(ctx, source, dir, "Media", "mp4", "job", contracts.CompletedFile{}, nil)
 	if err != context.Canceled {
@@ -478,8 +479,8 @@ func TestFinalizeCanceledDoesNotPublish(t *testing.T) {
 	}
 }
 func TestFinalizeRequiresValidIntermediateJobIdentity(t *testing.T) {
-	destination := t.TempDir()
-	source := filepath.Join(t.TempDir(), "source")
+	destination := testutil.TempDir(t)
+	source := filepath.Join(testutil.TempDir(t), "source")
 	if err := os.WriteFile(source, []byte("owned media"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -512,13 +513,13 @@ func (c cancelOnIntermediateContext) Err() error {
 	return nil
 }
 func TestFinalizeCancellationCleansOwnedIntermediateOnly(t *testing.T) {
-	destination := t.TempDir()
+	destination := testutil.TempDir(t)
 	known := ".dwnl-unrelated.partial"
 	knownPath := filepath.Join(destination, known)
 	if err := os.WriteFile(knownPath, []byte("unrelated user data"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	source := filepath.Join(t.TempDir(), "source")
+	source := filepath.Join(testutil.TempDir(t), "source")
 	if err := os.WriteFile(source, []byte("owned media"), 0600); err != nil {
 		t.Fatal(err)
 	}

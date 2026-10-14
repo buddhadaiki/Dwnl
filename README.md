@@ -2,7 +2,7 @@
 
 Protótipo pessoal para Windows: uma extensão Chrome Manifest V3 em TypeScript controla um auxiliar Go por Native Messaging. O auxiliar usa cópias privadas de yt-dlp, Deno, FFmpeg e ffprobe. Não há backend, serviço ou telemetria.
 
-O engine online usa os extratores existentes do yt-dlp através de um adaptador privado com HTTPS, DNS/IP fixados, redirects validados e bloqueio de credenciais/fallback externo. Casos reais de YouTube, Instagram, TikTok e X retornaram metadados e opções. O download testado do YouTube chegou à CDN e recebeu HTTP 403; não gerou arquivo final nem tentou contornar a recusa. Os testes de mídia sintética confirmam seleção exata, junção e MP3 por FFmpeg/ffprobe reais. Isso não promete suporte universal ou download validado em todas as plataformas.
+O engine online usa os extratores existentes do yt-dlp através de um adaptador privado com HTTPS, DNS/IP fixados, redirects validados e bloqueio de credenciais/fallback externo. Amostras públicas reais produziram vídeo Instagram e vídeo/MP3 X, confirmados por ffprobe, decodificação integral e readback de hash. YouTube e TikTok chegaram às respectivas CDNs e receberam HTTP 403; nenhum arquivo final foi gerado, e as recusas foram respeitadas. Os testes de mídia sintética também confirmam seleção exata, junção e MP3 por FFmpeg/ffprobe reais. Isso não promete suporte universal.
 
 ## Desenvolvimento local
 
@@ -41,11 +41,11 @@ O painel pode fechar sem cancelar. A perda da conexão encerra o trabalho e seus
 
 ## Artefatos e limites
 
-O build privado da extensão fica em `dist/extension/`, e o auxiliar em `dist/helper/`. O bootstrap `dist/bootstrap-20261014-final/Dwnl-Setup.exe` contém o helper e avisos; na execução manual, adquire os quatro executáveis diretamente dos fornecedores oficiais, com URLs/versões/hashes fixados em `release/suppliers.lock.json`. Verifica arquivos antes de instalar e registrar o host. O build inclui o recurso privado no popup e a permissão `downloads` somente quando recebe `--installer` com um setup verificado. O setup compilado não foi executado.
+O build privado da extensão fica em `dist/extension/`, e o auxiliar em `dist/helper/`. O bootstrap final desta etapa fica em `dist/bootstrap-20261014-live/Dwnl-Setup.exe` e contém o helper e avisos; na execução manual, adquire os quatro executáveis diretamente dos fornecedores oficiais, com URLs/versões/hashes fixados em `release/suppliers.lock.json`. Verifica arquivos antes de instalar e registrar o host. O build inclui o recurso privado no popup e a permissão `downloads` somente quando recebe `--installer` com um setup verificado. O setup compilado não foi executado.
 
 O bundle antigo `dist/validation-reviewed-20261013/Dwnl-Validation-DO-NOT-DISTRIBUTE.exe` continua separado e bloqueado para distribuição por fonte correspondente incompleta. O bootstrap não declara fontes completas ou prontidão para distribuição pública e não embute os binários de mídia dos fornecedores.
 
-Não houve instalação do Dwnl, registro de Native Messaging, carregamento em Chrome, publicação ou push. A validação real de instalação/Chrome depende de autorização específica. Recusas, login, DRM e desafios anti-bot interrompem a tarefa. Os resultados e os limites atuais estão na [validação online e do bootstrap](docs/validation/2026-10-14-online.md).
+Não houve instalação do Dwnl, registro de Native Messaging, carregamento em Chrome, publicação ou push. A validação real de instalação/Chrome depende de autorização específica. Recusas, login, DRM e desafios anti-bot interrompem a tarefa. Os resultados e os limites atuais estão na [validação online e do bootstrap](docs/validation/2026-10-14-online.md), e as alterações exatas previstas no Windows, a limitação de reinstalação e os passos manuais estão no [plano de primeira instalação/Chrome](docs/validation/2026-10-14-bootstrap-chrome.md).
 
 Consulte [as evidências de validação](docs/validation/2026-10-13-prototype.md), [a especificação aprovada](docs/superpowers/specs/2026-10-13-dwnl-design.md) e [o plano](docs/superpowers/plans/2026-10-13-dwnl-implementation-plan.md). Esses documentos distinguem comportamento pretendido de resultados efetivamente comprovados.
 

@@ -429,7 +429,7 @@ class DwnlIE(InfoExtractor):
         else:
             raise ExtractorError('DWNL_INVALID_SELECTION: extractor delegation limit', expected=True)
         items = _public_items(info)
-        fields = ('format_id', 'ext', 'vcodec', 'acodec', 'width', 'height', 'filesize', 'filesize_approx', 'abr', 'has_drm', 'protocol')
+        fields = ('format_id', 'ext', 'vcodec', 'acodec', 'width', 'height', 'filesize', 'filesize_approx', 'abr', 'tbr', 'has_drm', 'protocol')
         metadata = {'entries': [{key: item.get(key) for key in ('id', 'title', 'duration', 'availability', 'has_drm')}
                                 | {'formats': [{key: fmt.get(key) for key in fields} for fmt in item['formats']]}
                                 for item in items]}

@@ -29,7 +29,9 @@ WizardStyle=modern
 #include PackageRoot + "\payload-files.iss"
 
 [Code]
-var DownloadPage: TDownloadWizardPage;
+var
+  DownloadPage: TDownloadWizardPage;
+  WasOwnedInstallation, NativeKeyExisted: Boolean;
 const
   NativeKey = 'Software\Google\Chrome\NativeMessagingHosts\com.dwnl.host';
   GenericWrite = $40000000;
@@ -82,15 +84,20 @@ begin
     '  "allowed_origins": ["chrome-extension://{#ExtensionId}/"]' + #10 + '}' + #10;
 end;
 
-function OwnedManifest(): Boolean;
-var Registered, ManifestPath: string; Bytes: AnsiString;
+function ManifestMatches(): Boolean;
+var ManifestPath: string; Bytes: AnsiString;
 begin
   Result := False; ManifestPath := ExpandConstant('{app}\native-host.json');
   if IsReparsePath(ManifestPath) then Exit;
-  if not RegQueryStringValue(HKCU, NativeKey, '', Registered) then Exit;
-  if CompareText(Registered, ManifestPath) <> 0 then Exit;
   if not LoadStringFromFile(ManifestPath, Bytes) then Exit;
   Result := Bytes = UTF8Encode(ExpectedManifest());
+end;
+
+function OwnedManifest(): Boolean;
+var Registered: string;
+begin
+  Result := RegQueryStringValue(HKCU, NativeKey, '', Registered) and
+    (CompareText(Registered, ExpandConstant('{app}\native-host.json')) = 0) and ManifestMatches();
 end;
 
 function OwnedFilesInactive(): Boolean;
@@ -131,7 +138,7 @@ begin
   if IsReparsePath(ExpandConstant('{app}')) then begin
     Result := 'Dwnl refuses reparse paths.'; Exit;
   end;
-  if RegQueryStringValue(HKCU, NativeKey, '', Registered) and not OwnedManifest() then begin
+  if RegValueExists(HKCU, NativeKey, '') and not OwnedManifest() then begin
     Result := 'An existing native-host registration is not owned by this Dwnl setup.'; Exit;
   end;
   if DirExists(ExpandConstant('{app}')) and not OwnedManifest() then begin
@@ -140,6 +147,8 @@ begin
   if not OwnedFilesInactive() then begin
     Result := 'Close Dwnl jobs before updating. No process was terminated.'; Exit;
   end;
+  WasOwnedInstallation := OwnedManifest();
+  NativeKeyExisted := RegKeyExists(HKCU, NativeKey);
   try
     AcquireSuppliers();
     // All download/hash/extraction failures occur before the install step.
@@ -149,15 +158,24 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var ManifestPath: string;
+var ManifestPath, Registered: string;
 begin
   if CurStep <> ssPostInstall then Exit;
   VerifyInstalledPayload();
   ManifestPath := ExpandConstant('{app}\native-host.json');
   if not SaveStringToFile(ManifestPath, UTF8Encode(ExpectedManifest()), False) then
     RaiseException('Native manifest write failed; registration was not created.');
-  if not RegWriteStringValue(HKCU, NativeKey, '', ManifestPath) then
+  if not RegWriteStringValue(HKCU, NativeKey, '', ManifestPath) then begin
+    // Compensate only a new manifest/registration still matching our write.
+    // Preserve an existing working installation and third-party replacements.
+    if not WasOwnedInstallation and ManifestMatches() then begin
+      if RegQueryStringValue(HKCU, NativeKey, '', Registered) and
+         (CompareText(Registered, ManifestPath) = 0) then RegDeleteValue(HKCU, NativeKey, '');
+      if not NativeKeyExisted then RegDeleteKeyIfEmpty(HKCU, NativeKey);
+      DeleteFile(ManifestPath);
+    end;
     RaiseException('Native-host registration failed.');
+  end;
 end;
 
 function InitializeUninstall(): Boolean;

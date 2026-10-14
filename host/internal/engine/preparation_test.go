@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"dwnl/host/internal/contracts"
+	"dwnl/host/internal/testutil"
 	"dwnl/host/internal/windows"
 	"encoding/hex"
 	"errors"
@@ -15,8 +16,8 @@ import (
 
 func directMedia(t *testing.T) (string, string, []byte) {
 	t.Helper()
-	destination := t.TempDir()
-	source := filepath.Join(t.TempDir(), "processed")
+	destination := testutil.TempDir(t)
+	source := filepath.Join(testutil.TempDir(t), "processed")
 	data := []byte("verified host media bytes")
 	if err := os.WriteFile(source, data, 0600); err != nil {
 		t.Fatal(err)
