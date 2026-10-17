@@ -35,7 +35,7 @@ var onlineStaticArgs = []string{"--ignore-config", "--no-config-locations", "--n
 
 func onlineArgs(dir, bin string) []string {
 	a := append([]string{}, onlineStaticArgs...)
-	a = append(a, "deno:"+filepath.Join(bin, "deno.exe"), "--plugin-dirs", filepath.Join(dir, "plugins"), "--use-extractors", "^Dwnl$", "--extractor-args", "twitter:api=syndication", "--extractor-args", "youtube:player_client=android_vr;fetch_pot=never", "--downloader", "native", "--fixup", "never", "--no-playlist", "--socket-timeout", "15", "--retries", "1", "--fragment-retries", "1", "--concurrent-fragments", "1", "--max-filesize", "5G", "--newline", "--progress-template", "download:DWNL_PROGRESS %(progress.downloaded_bytes)s %(progress.total_bytes)s")
+	a = append(a, "deno:"+filepath.Join(bin, "deno.exe"), "--plugin-dirs", filepath.Join(dir, "plugins"), "--use-extractors", "^Dwnl$", "--extractor-args", "twitter:api=syndication", "--extractor-args", "youtube:player_client=visionos,web;fetch_pot=never", "--downloader", "native", "--fixup", "never", "--no-playlist", "--socket-timeout", "15", "--retries", "1", "--fragment-retries", "1", "--concurrent-fragments", "1", "--max-filesize", "5G", "--newline", "--progress-template", "download:DWNL_PROGRESS %(progress.downloaded_bytes)s %(progress.total_bytes)s")
 	return a
 }
 

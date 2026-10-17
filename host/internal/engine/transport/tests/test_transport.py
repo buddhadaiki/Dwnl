@@ -7,6 +7,7 @@ import http.client
 import unittest
 from unittest.mock import patch, MagicMock
 from yt_dlp.networking.common import Request
+from yt_dlp import YoutubeDL
 
 ADAPTER = pathlib.Path(__file__).resolve().parents[1] / 'yt_dlp_plugins/extractor/dwnl.py'
 SPEC = importlib.util.spec_from_file_location('dwnl_transport', ADAPTER)
@@ -80,10 +81,60 @@ class URLPolicyTests(unittest.TestCase):
         self.assertEqual(formats[2]['acodec'],'unknown')
 
     def test_alternative_youtube_client_stops_before_native_request(self):
-        with patch.object(transport.YoutubeIE,'_extract_player_response') as native:
-            with self.assertRaisesRegex(Exception,'DWNL_ACCESS_RESTRICTED'):
-                transport._YouTube(None)._extract_player_response('web_embedded')
-            native.assert_not_called()
+        for client in ('android_vr', 'web_embedded', 'web_embedded.visionos', 'tv', 'tv_downgraded', 'ios', 'all'):
+            with self.subTest(client=client), patch.object(transport.YoutubeIE,'_extract_player_response') as native:
+                with self.assertRaisesRegex(Exception,'DWNL_ACCESS_RESTRICTED'):
+                    transport._YouTube(None)._extract_player_response(client)
+                native.assert_not_called()
+
+    def test_current_public_youtube_clients_keep_native_player_response(self):
+        response = {'playabilityStatus': {'status': 'OK'}, 'videoDetails': {'videoId': 'public-video'}}
+        for client in ('visionos', 'web'):
+            with self.subTest(client=client), patch.object(transport.YoutubeIE, '_extract_player_response', return_value=response) as native:
+                self.assertIs(transport._YouTube(None)._extract_player_response(client), response)
+                native.assert_called_once_with(client)
+
+    def test_restricted_player_response_stops_native_client_iteration(self):
+        # Use the pinned upstream client orchestrator, not a mock of its loop.
+        # A refusal from the first public client must prevent trying the next.
+        for status in ('LOGIN_REQUIRED', 'AGE_VERIFICATION_REQUIRED', 'AGE_CHECK_REQUIRED'):
+            response = {'playabilityStatus': {'status': status}, 'videoDetails': {'videoId': 'abcdefghijk'}}
+            with self.subTest(status=status), YoutubeDL({'quiet': True, 'no_warnings': True, 'js_runtimes': {}}, auto_init=False) as downloader:
+                extractor = transport._YouTube(downloader)
+                with patch.object(downloader, 'urlopen', side_effect=AssertionError('offline test attempted networking')) as request, patch.object(transport.YoutubeIE, '_extract_player_response', return_value=response) as native:
+                    with self.assertRaisesRegex(Exception, 'DWNL_ACCESS_RESTRICTED'):
+                        extractor._extract_player_responses(['visionos', 'web'], 'abcdefghijk', None, 'web', {}, False)
+                    self.assertEqual(native.call_count, 1)
+                    self.assertEqual(native.call_args.args[0], 'visionos')
+                    request.assert_not_called()
+
+    def test_native_user_agent_and_public_headers_survive_without_credentials(self):
+        transport.STATE.update(platform='youtube', mode='download', bytes=0, requests=0)
+        response = wire_response(b'HTTP/1.1 206 Partial Content\r\nContent-Length: 3\r\n\r\nabc')
+        connection = MagicMock(); connection.getresponse.return_value = response
+        headers = {'uSeR-aGeNt': 'Upstream public client/1.0', 'Range': 'bytes=0-2', 'Origin': 'https://www.youtube.com', 'Referer': 'https://www.youtube.com/', 'X-YouTube-Client-Name': '101', 'Cookie': 'secret=x', 'Authorization': 'Bearer secret', 'Proxy-Authorization': 'Basic secret', 'Host': 'untrusted.invalid', 'X-Forwarded-For': '127.0.0.1', 'Forwarded': 'for=127.0.0.1', 'Accept-Encoding': 'br', 'Connection': 'keep-alive'}
+        with patch.object(transport, '_PinnedConnection', return_value=connection):
+            result = transport.DwnlRH(logger=MagicMock()).send(Request('https://rr1.googlevideo.com/media', headers=headers))
+            self.assertEqual(result.read(), b'abc'); result.close()
+        sent = {key.lower(): value for key, value in connection.request.call_args.kwargs['headers'].items()}
+        for key in ('user-agent', 'range', 'origin', 'referer', 'x-youtube-client-name'):
+            self.assertEqual(sent[key], {key.lower(): value for key, value in headers.items()}[key])
+        for key in ('cookie', 'authorization', 'proxy-authorization', 'host', 'x-forwarded-for', 'forwarded'):
+            self.assertNotIn(key, sent)
+        self.assertEqual(sent['accept-encoding'], 'identity')
+        self.assertEqual(sent['connection'], 'close')
+
+    def test_cross_host_redirect_keeps_user_agent_but_drops_origin_and_referer(self):
+        transport.STATE.update(platform='youtube', mode='download', bytes=0, requests=0)
+        connections = [MagicMock(), MagicMock()]
+        connections[0].getresponse.return_value = wire_response(b'HTTP/1.1 302 Found\r\nLocation: https://rr1.googlevideo.com/media\r\n\r\n')
+        connections[1].getresponse.return_value = wire_response(b'HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc')
+        with patch.object(transport, '_PinnedConnection', side_effect=connections):
+            result = transport.DwnlRH(logger=MagicMock()).send(Request('https://www.youtube.com/media', headers={'User-Agent': 'Upstream public client/1.0', 'Origin': 'https://www.youtube.com', 'Referer': 'https://www.youtube.com/'}))
+            self.assertEqual(result.read(), b'abc'); result.close()
+        sent = {key.lower(): value for key, value in connections[1].request.call_args.kwargs['headers'].items()}
+        self.assertEqual(sent['user-agent'], 'Upstream public client/1.0')
+        self.assertNotIn('origin', sent); self.assertNotIn('referer', sent)
 
     def test_tls_connects_only_to_checked_numeric_endpoint_and_original_hostname(self):
         sock=MagicMock();sock.getpeername.return_value=('8.8.8.8',443)
@@ -93,6 +144,35 @@ class URLPolicyTests(unittest.TestCase):
             dns.assert_called_once_with('www.youtube.com',443)
             sock.connect.assert_called_once_with(('8.8.8.8',443))
             tls.wrap_socket.assert_called_once_with(sock,server_hostname='www.youtube.com')
+
+    def test_wire_host_header_omits_the_default_port_for_its_scheme(self):
+        for secure, port in ((True, 443), (False, 80)):
+            with self.subTest(secure=secure, port=port):
+                sink = WireSink()
+                connection = transport._PinnedConnection('rr1.googlevideo.com', port, 15, secure)
+                connection.sock = sink
+                with patch.object(transport.socket, 'socket', side_effect=AssertionError('offline wire test attempted socket')):
+                    connection.request('GET', '/media?synthetic=value')
+                    connection.close()
+                hosts = [line for line in sink.wire.split(b'\r\n') if line.lower().startswith(b'host:')]
+                self.assertEqual(hosts, [b'Host: rr1.googlevideo.com'])
+                self.assertTrue(sink.closed)
+
+    def test_wire_request_replaces_caller_host_with_validated_https_authority(self):
+        transport.STATE.update(platform='youtube', mode='download', bytes=0, requests=0)
+        sink = WireSink()
+        def connect(connection):
+            connection.sock = sink
+        with patch.object(transport._PinnedConnection, 'connect', connect), \
+                patch.object(transport._PinnedConnection, 'getresponse', return_value=wire_response(b'HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n')), \
+                patch.object(transport.socket, 'socket', side_effect=AssertionError('offline wire test attempted socket')):
+            response = transport.DwnlRH(logger=MagicMock()).send(Request(
+                'https://rr1.googlevideo.com/media?synthetic=value', headers={'Host': 'untrusted.invalid'}))
+            response.close()
+        lines = sink.wire.split(b'\r\n')
+        self.assertEqual(lines[0], b'GET /media?synthetic=value HTTP/1.1')
+        self.assertEqual([line for line in lines if line.lower().startswith(b'host:')], [b'Host: rr1.googlevideo.com'])
+        self.assertNotIn(b'untrusted.invalid', sink.wire)
 
     def test_http_range_and_streaming_body_are_preserved_without_cookies(self):
         transport.STATE.update(platform='youtube',mode='download',bytes=0,requests=0)
@@ -132,6 +212,18 @@ class URLPolicyTests(unittest.TestCase):
         body=transport._LimitedBody(io.BytesIO(b'abc'),MagicMock(),'identity')
         with self.assertRaisesRegex(Exception,'byte budget'):
             body.read(3)
+
+class WireSink:
+    def __init__(self):
+        self.wire = b''
+        self.closed = False
+
+    def sendall(self, data):
+        self.wire += data
+
+    def close(self):
+        self.closed = True
+
 
 def wire_response(raw):
     class Socket:

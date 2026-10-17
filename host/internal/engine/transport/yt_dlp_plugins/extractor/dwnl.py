@@ -4,8 +4,12 @@ The CLI selects only DwnlIE. If this module fails to load, no default IE can
 take over. Every supported extractor and native media downloader uses the
 singleton request director below; TLS connects to an already checked IP.
 """
+import atexit
+import base64
+import email.utils
 import gzip
 import http.client
+import http.cookiejar
 import io
 import itertools
 import ipaddress
@@ -15,8 +19,11 @@ import re
 import socket
 import ssl
 import sys
+import time
 import urllib.parse
+from html.parser import HTMLParser
 
+from yt_dlp.cookies import YoutubeDLCookieJar
 from yt_dlp.extractor.common import InfoExtractor
 from yt_dlp.extractor.youtube import YoutubeIE
 from yt_dlp.extractor.instagram import InstagramIE
@@ -44,6 +51,290 @@ INPUT_HOSTS = {
 FORMAT_ID = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
 PROTOCOLS = {'http', 'https', 'm3u8', 'm3u8_native', 'http_dash_segments'}
 STATE = {'platform': None, 'mode': 'analyze', 'bytes': 0, 'requests': 0, 'byte_limit': None}
+
+
+def tiktok_restricted():
+    return RequestError('DWNL_ACCESS_RESTRICTED: TikTok anonymous verification did not provide public access')
+
+
+class _TikTokCookiePolicy(http.cookiejar.DefaultCookiePolicy):
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+
+    def set_ok(self, cookie, request):
+        # No server Set-Cookie is imported. Only the fixed upstream WAF
+        # computation may insert the two allowlisted cookies directly.
+        return False
+
+    def return_ok(self, cookie, request):
+        return (self.session.phase == 'ready'
+                and request.get_full_url() == self.session.canonical_url
+                and cookie.name in ('_wafchallengeid', 'waforiginalreid')
+                and cookie.secure and super().return_ok(cookie, request))
+
+
+class _TikTokCookieJar(YoutubeDLCookieJar):
+    def __init__(self, session):
+        super().__init__(filename=None, policy=_TikTokCookiePolicy(session))
+        self.session = session
+
+    def set_cookie(self, cookie, *args, **kwargs):
+        # CookieJar.set_cookie bypasses CookiePolicy; validate this route too.
+        value = cookie.value
+        if (self.session.phase != 'solving'
+                or cookie.name not in ('_wafchallengeid', 'waforiginalreid')
+                or cookie.domain not in ('.tiktok.com', 'tiktok.com', 'www.tiktok.com')
+                or cookie.path != '/' or cookie.port is not None
+                or not isinstance(value, str) or not 0 < len(value) <= 4096
+                or any(ord(c) < 33 or ord(c) > 126 or c in ';,"\\' for c in value)):
+            raise policy_error('anonymous cookie is outside its fixed scope')
+        now = int(time.time())
+        if cookie.expires is not None and (type(cookie.expires) is not int or cookie.expires <= now):
+            raise policy_error('anonymous cookie expiry is invalid')
+        # Collapse accepted aliases to one key per fixed name: never more
+        # than two stored cookies or duplicate names in the outbound header.
+        cookie.domain = '.tiktok.com'
+        cookie.domain_specified = cookie.domain_initial_dot = True
+        cookie.secure, cookie.discard = True, True
+        cookie.expires = min(cookie.expires if cookie.expires is not None else now + 120, now + 120)
+        return super().set_cookie(cookie, *args, **kwargs)
+
+    def clear(self, *args, **kwargs):
+        # Upstream also clears after its GET. Transport cleanup may already
+        # have purged these cookies on success, refusal or connection failure.
+        try:
+            return super().clear(*args, **kwargs)
+        except KeyError:
+            return None
+
+    def load(self, *args, **kwargs):
+        raise policy_error('anonymous cookies cannot be loaded')
+
+    def save(self, *args, **kwargs):
+        raise policy_error('anonymous cookies cannot be saved')
+
+    def revert(self, *args, **kwargs):
+        raise policy_error('anonymous cookies cannot be loaded')
+
+
+class _TikTokChallengeElements(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.elements = {}
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        identity = attrs.get('id')
+        if identity in ('cs', 'wci', 'rci', 'rs'):
+            if identity in self.elements:
+                raise tiktok_restricted()
+            self.elements[identity] = attrs.get('class', '')
+
+
+def _validate_tiktok_challenge(webpage):
+    if (not isinstance(webpage, str) or len(webpage.encode('utf-8')) > 65536
+            or re.search(r'LOGIN_REQUIRED|AGE_VERIFICATION_REQUIRED|AGE_CHECK_REQUIRED|captcha|sign in|log in', webpage, re.I)):
+        raise tiktok_restricted()
+    try:
+        parser = _TikTokChallengeElements()
+        parser.feed(webpage)
+        fields = parser.elements
+        if (fields.get('wci') != '_wafchallengeid'
+                or (fields.get('rs') and fields.get('rci') != 'waforiginalreid')
+                or fields.get('rci') not in (None, 'waforiginalreid')
+                or not 0 < len(fields.get('cs', '')) <= 16384):
+            raise ValueError('unsupported structure')
+        encoded = fields['cs']
+        data = json.loads(base64.b64decode(encoded + '=' * (-len(encoded) % 4), validate=True))
+        seed, digest = data['v']['a'], data['v']['c']
+        if not isinstance(seed, str) or not isinstance(digest, str) or len(seed) > 8192 or len(digest) > 64:
+            raise ValueError('unsupported digest input')
+        decode = lambda value: base64.b64decode(value + '=' * (-len(value) % 4), validate=True)
+        if not 0 < len(decode(seed)) <= 4096 or len(decode(digest)) != 32:
+            raise ValueError('unsupported digest size')
+        return {'_wafchallengeid'} | ({'waforiginalreid'} if fields.get('rs') else set())
+    except Exception:
+        raise tiktok_restricted() from None
+
+
+class _TikTokCdnSession:
+    """One official anonymous token; never a cookiejar or extractor field."""
+    def __init__(self):
+        self._value = None
+        self._expires = 0
+        self._seen = False
+        self._public = False
+        self._url = None
+        self._bound = False
+
+    def capture(self, raw, eligible):
+        if not re.match(r'^\s*tt_chain_token\s*=', raw) or not eligible:
+            return
+        try:
+            if (self._seen or len(raw) > 8192
+                    or any(ord(c) < 32 or ord(c) > 126 for c in raw)):
+                raise ValueError()
+            self._seen = True
+            first, *segments = raw.split(';')
+            name, _, value = first.partition('=')
+            if (name.strip() != 'tt_chain_token' or not 0 < len(value) <= 4096
+                    or any(ord(c) < 33 or ord(c) > 126 or c in ';,"\\' for c in value)):
+                raise ValueError()
+            attrs = {}
+            for segment in segments:
+                key, separator, attr = segment.strip().partition('=')
+                key, attr = key.lower(), attr.strip()
+                if (key in attrs or key not in ('domain', 'path', 'secure', 'httponly', 'samesite', 'expires', 'max-age')
+                        or (key in ('secure', 'httponly') and separator)
+                        or (key not in ('secure', 'httponly') and (not separator or not attr))):
+                    raise ValueError()
+                if attr.startswith('"'):
+                    if not attr.endswith('"') or '"' in attr[1:-1] or '\\' in attr:
+                        raise ValueError()
+                    attr = attr[1:-1]
+                attrs[key] = attr
+            if (attrs.get('domain', '').lower() not in ('tiktok.com', '.tiktok.com')
+                    or attrs.get('path') != '/'
+                    or ('samesite' in attrs and attrs['samesite'].lower() not in ('none', 'lax', 'strict'))):
+                raise ValueError()
+            ttl = 120.0
+            if 'max-age' in attrs:
+                if not re.fullmatch(r'[0-9]{1,10}', attrs['max-age']):
+                    raise ValueError()
+                ttl = min(ttl, int(attrs['max-age']))
+            if 'expires' in attrs:
+                expiry = email.utils.parsedate_to_datetime(attrs['expires'])
+                if expiry is None or expiry.tzinfo is None:
+                    raise ValueError()
+                ttl = min(ttl, expiry.timestamp() - time.time())
+            if not 0 < ttl <= 120:
+                raise ValueError()
+            # Secure is imposed locally: even a server cookie without the
+            # Secure attribute can only reach the exact bound HTTPS URL.
+            self._value, self._expires = value, time.monotonic() + ttl
+        except (ValueError, TypeError, OverflowError):
+            self.close()
+            raise tiktok_restricted() from None
+
+    def promote(self, data, status):
+        author = data.get('author') if isinstance(data, dict) else None
+        self._public = (type(status) is int and status == 0 and isinstance(data, dict)
+                        and bool(data.get('id')) and isinstance(data.get('video'), dict) and bool(data['video'])
+                        and not any(data.get(key) for key in ('privateItem', 'isPrivate', 'secret', 'isSecret', 'isContentClassified'))
+                        and not (isinstance(author, dict) and (author.get('privateAccount') or author.get('isPrivateAccount'))))
+        if not self._public or STATE['mode'] != 'download':
+            self.close()
+
+    def bind(self, selected):
+        if self._bound:
+            self.close()
+            raise tiktok_restricted()
+        if STATE['mode'] != 'download' or not self._public or self._value is None:
+            self.close()
+            return
+        url = selected.get('url')
+        try:
+            parsed = checked_url(url, 'tiktok')
+        except BaseException:
+            self.close()
+            raise
+        if (parsed.scheme != 'https' or parsed.fragment or parsed.hostname in ('tiktok.com', 'www.tiktok.com')
+                or not parsed.hostname.endswith('.tiktok.com')
+                or selected.get('protocol') != 'https' or selected.get('fragments') or selected.get('manifest_url')
+                or parsed.path.lower().endswith(('.m3u8', '.mpd'))):
+            self.close()
+            return
+        self._url, self._bound = url, True
+
+    def request_cookie(self, url, method):
+        if self._url is None or self._value is None:
+            return None
+        if (STATE['mode'] != 'download' or url != self._url or method != 'GET'
+                or time.monotonic() >= self._expires):
+            self.close()
+            return None
+        return 'tt_chain_token=' + self._value
+
+    def close(self):
+        self._value, self._expires, self._url, self._public = None, 0, None, False
+
+
+class _TikTokSession:
+    def __init__(self, downloader):
+        self.downloader = downloader
+        self.jar = _TikTokCookieJar(self)
+        self.canonical_url = None
+        self.phase = 'new'
+        self.attempted = False
+        self.source_ok = False
+        self.cdn = _TikTokCdnSession()
+
+    def start_page(self, url):
+        parsed = checked_url(url, 'tiktok')
+        if (self.phase != 'new' or parsed.hostname != 'www.tiktok.com'
+                or parsed.query or parsed.fragment
+                or not re.fullmatch(r'/@[^/]+/(?:video|photo)/[0-9]+', parsed.path)):
+            raise tiktok_restricted()
+        self.canonical_url, self.phase = url, 'page'
+
+    def record_response(self, url, method, status):
+        self.source_ok = url == self.canonical_url and method == 'GET' and status == 200
+
+    def request_cookie(self, url, method):
+        if self.phase != 'ready':
+            return None
+        if url != self.canonical_url or method != 'GET':
+            self.purge()
+            raise tiktok_restricted()
+        header = self.jar.get_cookie_header(url)
+        if not header:
+            self.purge()
+            raise tiktok_restricted()
+        self.phase = 'sending'
+        return header
+
+    def finish_request(self):
+        if self.phase == 'sending':
+            self.purge()
+
+    def purge(self):
+        self.jar.clear()
+        self.phase = 'done'
+
+    def close(self):
+        self.purge()
+        self.cdn.close()
+        self.phase = 'closed'
+
+
+def _check_tiktok_cookie_sources(downloader):
+    # Check parameters before touching cached cookiejar/request_director:
+    # either cached property may otherwise load a supplied file/browser jar.
+    if (downloader is None or downloader.params.get('cookiefile') is not None
+            or downloader.params.get('cookiesfrombrowser') is not None):
+        raise policy_error('anonymous session cannot import cookies')
+
+
+def _tiktok_session(downloader):
+    _check_tiktok_cookie_sources(downloader)
+    session = STATE.get('tiktok_session')
+    if session is not None:
+        if session.downloader is not downloader or session.phase == 'closed':
+            raise policy_error('anonymous session cannot be replaced')
+        return session
+    handlers = downloader._request_director.handlers
+    if len(handlers) != 1 or not isinstance(next(iter(handlers.values())), DwnlRH):
+        raise policy_error('private transport is not exclusive')
+    handler = next(iter(handlers.values()))
+    if list(downloader.cookiejar) or list(handler.cookiejar):
+        raise policy_error('anonymous session requires empty cookies')
+    session = _TikTokSession(downloader)
+    downloader.cookiejar = handler.cookiejar = session.jar
+    handler.tiktok_session = session
+    STATE['tiktok_session'] = session
+    atexit.register(session.close)
+    return session
 
 
 def policy_error(reason):
@@ -118,6 +409,7 @@ def dial_public(host, port, timeout, secure):
 
 class _PinnedConnection(http.client.HTTPConnection):
     def __init__(self, host, port, timeout, secure):
+        self.default_port = 443 if secure else 80
         super().__init__(host, port, timeout=timeout)
         self.secure = secure
 
@@ -128,13 +420,16 @@ class _PinnedConnection(http.client.HTTPConnection):
 
 
 class _LimitedBody(io.RawIOBase):
-    def __init__(self, response, connection, encoding):
+    def __init__(self, response, connection, encoding, cdn=None):
         self.response, self.connection = response, connection
+        self.cdn, self.eof = cdn, False
         if encoding in ('', 'identity'):
             self.reader = response
         elif encoding == 'gzip':
             self.reader = gzip.GzipFile(fileobj=response)
         else:
+            if self.cdn is not None:
+                self.cdn.close()
             response.close()
             connection.close()
             raise TransportError('DWNL_NETWORK_ERROR: unsupported content encoding')
@@ -143,6 +438,15 @@ class _LimitedBody(io.RawIOBase):
         return True
 
     def read(self, size=-1):
+        try:
+            return self._read(size)
+        except BaseException:
+            if self.cdn is not None:
+                self.cdn.close()
+            self.close()
+            raise
+
+    def _read(self, size=-1):
         limit = STATE.get('byte_limit') or (32 * 1024 * 1024 if STATE['mode'] == 'analyze' else 5 * 1024 * 1024 * 1024)
         remaining = limit - STATE['bytes']
         if remaining < 0:
@@ -155,6 +459,11 @@ class _LimitedBody(io.RawIOBase):
             result = self.reader.read(amount)
         except (OSError, http.client.HTTPException) as error:
             raise TransportError('DWNL_NETWORK_ERROR: interrupted response', cause=error) from error
+        # read(0) is not EOF. A gzip reader can buffer a decoded tail after
+        # its compressed HTTP body closes, so only identity may use wire EOF.
+        if amount > 0 and (len(result) < amount or (self.reader is self.response
+                and getattr(self.response, 'isclosed', lambda: False)())):
+            self.eof = True
         STATE['bytes'] += len(result)
         if unbounded and len(result) > 32 * 1024 * 1024:
             self.close()
@@ -165,17 +474,41 @@ class _LimitedBody(io.RawIOBase):
         return result
 
     def close(self):
-        if hasattr(self,'reader'):
-            self.reader.close()
-        self.response.close()
-        self.connection.close()
-        super().close()
+        # A complete Range body may be followed by another GET of the exact
+        # same selection. Premature close/cancellation drops the token.
+        if self.cdn is not None and not self.eof:
+            self.cdn.close()
+        try:
+            if hasattr(self, 'reader'):
+                self.reader.close()
+            self.response.close()
+        except BaseException:
+            if self.cdn is not None:
+                self.cdn.close()
+            raise
+        finally:
+            self.connection.close()
+            super().close()
 
 
 class DwnlRH(RequestHandler):
     _SUPPORTED_URL_SCHEMES = ('http', 'https')
 
+    def close(self):
+        session = getattr(self, 'tiktok_session', None)
+        if session is not None:
+            session.close()
+
     def _validate(self, request):
+        try:
+            return self._validate_owned(request)
+        except BaseException:
+            session = getattr(self, 'tiktok_session', None)
+            if session is not None:
+                session.cdn.close()
+            raise
+
+    def _validate_owned(self, request):
         checked_url(request.url, STATE['platform'])
         if any(value for value in self._get_proxies(request).values()):
             raise policy_error('proxies are unavailable')
@@ -187,30 +520,77 @@ class DwnlRH(RequestHandler):
             raise policy_error('TLS policy cannot be changed')
         if any(key not in ('timeout', 'cookiejar', 'keep_header_casing', 'impersonate') for key in request.extensions):
             raise policy_error('unsupported transport extension')
+        session = getattr(self, 'tiktok_session', None)
+        if session is not None and (STATE['platform'] != 'tiktok'
+                or request.extensions.get('cookiejar') not in (None, session.jar)):
+            raise policy_error('anonymous cookiejar cannot be substituted or shared')
 
     def _send(self, request):
+        try:
+            return self._send_owned(request)
+        except BaseException:
+            session = getattr(self, 'tiktok_session', None)
+            if session is not None:
+                session.cdn.close()
+            raise
+
+    def _send_owned(self, request):
         self._validate(request)
         url, method, data = request.url, request.method, request.data
         headers = self._get_headers(request)
         forbidden = {'cookie', 'authorization', 'proxy-authorization', 'host', 'x-forwarded-for', 'forwarded',
-                     'accept-encoding', 'user-agent', 'connection'}
+                     'accept-encoding', 'connection'}
         headers = {key: value for key, value in headers.items() if key.lower() not in forbidden}
-        headers.update({'User-Agent': 'Dwnl/0.1 public-media', 'Accept-Encoding': 'identity', 'Connection': 'close'})
+        # The pinned extractor supplies a UA consistent with its public client
+        # and selected media headers. No browser credentials are accepted.
+        if not any(key.lower() == 'user-agent' for key in headers):
+            headers['User-Agent'] = 'Dwnl/0.1 public-media'
+        headers.update({'Accept-Encoding': 'identity', 'Connection': 'close'})
         for _ in range(11):
             parsed = checked_url(url, STATE['platform'])
             STATE['requests'] += 1
             if STATE['requests'] > (128 if STATE['mode'] == 'analyze' else 10000):
                 raise policy_error('request count budget exceeded')
-            connection = _PinnedConnection(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80),
-                                           min(15, self._calculate_timeout(request)), parsed.scheme == 'https')
+            session = getattr(self, 'tiktok_session', None)
+            cookie = session.request_cookie(url, method) if session is not None else None
+            cdn_cookie = session.cdn.request_cookie(url, method) if session is not None else None
+            if cdn_cookie:
+                if cookie:
+                    raise policy_error('anonymous sessions cannot share a request')
+                cookie = cdn_cookie
+            if cookie:
+                headers['Cookie'] = cookie
+            connection, response = None, None
             try:
+                connection = _PinnedConnection(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80),
+                                               min(15, self._calculate_timeout(request)), parsed.scheme == 'https')
                 target = urllib.parse.urlunsplit(('', '', parsed.path or '/', parsed.query, ''))
                 connection.request(method, target, body=data, headers=headers)
                 response = connection.getresponse()
+                if session is not None:
+                    session.record_response(url, method, response.status)
+                    for key, value in response.getheaders():
+                        if key.lower() == 'set-cookie':
+                            session.cdn.capture(value, STATE['mode'] == 'download' and session.source_ok)
             except (OSError, http.client.HTTPException) as error:
-                connection.close()
+                if connection is not None:
+                    connection.close()
                 raise TransportError('DWNL_NETWORK_ERROR: HTTP connection failed', cause=error) from error
+            except BaseException:
+                if response is not None:
+                    response.close()
+                if connection is not None:
+                    connection.close()
+                raise
+            finally:
+                if session is not None:
+                    session.finish_request()
+                headers.pop('Cookie', None)
             print('DWNL_NET ' + parsed.hostname + ' ' + str(response.status), file=sys.stderr)
+            if cookie and response.status not in ((200, 206) if cdn_cookie else (200,)):
+                response.close()
+                connection.close()
+                raise tiktok_restricted()
             if response.status in (301, 302, 303, 307, 308):
                 location = response.getheader('Location')
                 response.close()
@@ -235,7 +615,7 @@ class DwnlRH(RequestHandler):
                 raise RequestError('DWNL_ACCESS_RESTRICTED: server HTTP ' + str(status) + '; no credentials or bypass used')
             encoding = response.getheader('Content-Encoding', '').lower()
             dropped = {'set-cookie'} | ({'content-length','content-encoding'} if encoding == 'gzip' else set())
-            wrapped = Response(_LimitedBody(response, connection, encoding),
+            wrapped = Response(_LimitedBody(response, connection, encoding, session.cdn if session is not None else None),
                                url, {key: value for key, value in response.getheaders() if key.lower() not in dropped},
                                response.status, response.reason)
             if response.status >= 400:
@@ -271,7 +651,9 @@ class _YouTube(_CookieFreeMixin, YoutubeIE):
         return result
 
     def _extract_player_response(self, client, *args, **kwargs):
-        if client != 'android_vr':
+        # Match the pinned upstream anonymous defaults explicitly. Its retired
+        # android_vr client returns 403; embedded/authenticated fallbacks stay off.
+        if client not in ('visionos', 'web'):
             raise RequestError('DWNL_ACCESS_RESTRICTED: alternative player client is unavailable')
         result = super()._extract_player_response(client, *args, **kwargs)
         _check_player_access(result)
@@ -301,6 +683,73 @@ class _TikTok(_CookieFreeMixin, TikTokIE):
     @classmethod
     def ie_key(cls):
         return TikTokIE.ie_key()
+
+    def _extract_web_formats(self, aweme_detail):
+        formats = super()._extract_web_formats(aweme_detail)
+        music = aweme_detail.get('music')
+        music_url = music.get('playUrl') if isinstance(music, dict) else None
+        if not isinstance(music_url, str) or not music_url:
+            return formats
+        music_url = self._proto_relative_url(music_url)
+        # The associated library track is not the clip's original audio mix.
+        # Preserve every video format and any independently sourced format.
+        return [fmt for fmt in formats if not (fmt.get('format_id') == 'audio'
+                and fmt.get('vcodec') == 'none' and fmt.get('url') == music_url)]
+
+    def _set_cookie(self, *args, **kwargs):
+        session = STATE.get('tiktok_session')
+        if session is None or session.downloader is not self._downloader:
+            raise policy_error('anonymous cookie has no owned session')
+        return InfoExtractor._set_cookie(self, *args, **kwargs)
+
+    def _solve_challenge_and_set_cookies(self, webpage):
+        session = STATE.get('tiktok_session')
+        if (session is None or session.downloader is not self._downloader
+                or session.phase != 'page' or session.attempted or not session.source_ok):
+            raise tiktok_restricted()
+        # Reserve before validation so failures, redirects and another IE
+        # instance cannot restart the one permitted verification computation.
+        session.attempted = True
+        succeeded = False
+        try:
+            expected_names = _validate_tiktok_challenge(webpage)
+            session.phase = 'solving'
+            # Pinned upstream is a finite native Python computation (at most
+            # 1,000,001 candidates), with no JS execution or external provider.
+            names = TikTokIE._solve_challenge_and_set_cookies(self, webpage)
+            if any(name and name not in ('_wafchallengeid', 'waforiginalreid') for name in names):
+                raise tiktok_restricted()
+            # Upstream returns the optional name even when its value is empty
+            # and no optional cookie was inserted. Cleanup only real cookies.
+            names = tuple(name for name in names if name in expected_names)
+            if set(names) != expected_names or {cookie.name for cookie in session.jar} != expected_names:
+                raise tiktok_restricted()
+            session.phase = 'ready'
+            succeeded = True
+            return names
+        except Exception:
+            raise tiktok_restricted() from None
+        finally:
+            if not succeeded:
+                session.purge()
+
+    def _extract_web_data_and_status(self, url, video_id, fatal=True):
+        session = _tiktok_session(self._downloader)
+        try:
+            session.start_page(url)
+            data, status = super()._extract_web_data_and_status(url, video_id, fatal=fatal)
+            session.cdn.promote(data, status)
+            return data, status
+        except ExtractorError:
+            session.cdn.close()
+            if session.attempted:
+                raise tiktok_restricted() from None
+            raise
+        except BaseException:
+            session.cdn.close()
+            raise
+        finally:
+            session.purge()
 
 
 class _TikTokShort(_CookieFreeMixin, TikTokVMIE):
@@ -370,6 +819,16 @@ def _public_items(info, depth=0):
 
 
 def validate_selection(item, guard):
+    try:
+        return _validate_selection(item, guard)
+    except BaseException:
+        session = STATE.get('tiktok_session')
+        if session is not None:
+            session.cdn.close()
+        raise
+
+
+def _validate_selection(item, guard):
     invalid = lambda: ExtractorError('DWNL_INVALID_SELECTION: public source selection changed; analyze again', expected=True)
     if not isinstance(guard, dict) or str(item.get('id')) != guard.get('id'):
         raise invalid()
@@ -389,6 +848,7 @@ def validate_selection(item, guard):
     if type(budget) is not int or not 0 < budget <= 5 * 1024 * 1024 * 1024:
         raise invalid()
     STATE['byte_limit'] = budget
+    return matches[0]
 
 
 class DwnlIE(InfoExtractor):
@@ -397,10 +857,21 @@ class DwnlIE(InfoExtractor):
     _GEO_BYPASS = False
 
     def _real_extract(self, url):
+        try:
+            return self._extract_owned(url)
+        except BaseException:
+            session = STATE.get('tiktok_session')
+            if session is not None:
+                session.cdn.close()
+            raise
+
+    def _extract_owned(self, url):
         platform = next((key for key, hosts in INPUT_HOSTS.items() if urllib.parse.urlsplit(url).hostname in hosts), None)
         if not platform:
             raise ExtractorError('DWNL_NETWORK_POLICY: unsupported source host', expected=True)
         checked_url(url, platform)
+        if platform == 'tiktok':
+            _check_tiktok_cookie_sources(self._downloader)
         director = self._downloader._request_director
         if len(director.handlers) != 1 or not isinstance(next(iter(director.handlers.values())), DwnlRH):
             raise RequestError('DWNL_NETWORK_POLICY: private transport is not exclusive')
@@ -413,6 +884,8 @@ class DwnlIE(InfoExtractor):
         if mode not in ('analyze', 'download'):
             raise ExtractorError('DWNL_INVALID_SELECTION: unsupported host operation', expected=True)
         STATE.update(platform=platform, mode=mode, bytes=0, requests=0, byte_limit=32 * 1024 * 1024)
+        if platform == 'tiktok':
+            _tiktok_session(self._downloader)
         mapping = {'youtube': (_YouTube,), 'instagram': (_Instagram,),
                    'tiktok': (_TikTokShort, _TikTok), 'x': (_Twitter,)}
         for _ in range(5):
@@ -447,7 +920,9 @@ class DwnlIE(InfoExtractor):
                 raw = selection.read(2 * 1024 * 1024 + 1)
             if len(raw) > 2 * 1024 * 1024:
                 raise ExtractorError('DWNL_INVALID_SELECTION: selection guard exceeds limit', expected=True)
-            validate_selection(matches[0], json.loads(raw))
+            selected_format = validate_selection(matches[0], json.loads(raw))
+            if platform == 'tiktok':
+                STATE['tiktok_session'].cdn.bind(selected_format)
             return matches[0]
         return info
 

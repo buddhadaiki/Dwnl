@@ -141,6 +141,9 @@ func TestOnlineAnalyzeUsesPrivateAdapterAndOffersActualMultiItems(t *testing.T) 
 	if !strings.Contains(args, "^Dwnl$") || !strings.Contains(args, "--no-cookies") || !strings.Contains(args, "--no-geo-bypass") || !strings.Contains(args, "--no-remote-components") {
 		t.Fatalf("unsafe extractor args: %v", r.specs[0].Args)
 	}
+	if !strings.Contains(args, "youtube:player_client=visionos,web;fetch_pot=never") {
+		t.Fatalf("extractor used obsolete or unrestricted YouTube clients: %v", r.specs[0].Args)
+	}
 	entries, err := os.ReadDir(analysisRoot)
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("analysis tokens/temporary state retained: %v %v", entries, err)
@@ -150,6 +153,24 @@ func TestOnlineAnalyzeUsesPrivateAdapterAndOffersActualMultiItems(t *testing.T) 
 	_, _, err = e.selection(contracts.DownloadPlan{HostSessionID: "online-session", Analysis: analysis, Item: analysis.Items[1], JobID: "job", DestinationID: "approved", Mode: contracts.ModeVideo, VideoChoice: &selected})
 	if err != nil {
 		t.Fatalf("second post item could not be selected: %v", err)
+	}
+}
+
+func TestYouTubePublicClientGrammarRejectsObsoleteOrUnboundedClients(t *testing.T) {
+	root := testutil.TempDir(t)
+	for _, client := range []string{"android_vr", "default", "all", "web_embedded", "visionos,web,web_embedded"} {
+		t.Run(client, func(t *testing.T) {
+			args := onlineArgs(root, root)
+			for index, value := range args {
+				if strings.HasPrefix(value, "youtube:player_client=") {
+					args[index] = "youtube:player_client=" + client + ";fetch_pot=never"
+				}
+			}
+			args = append(args, "--extractor-args", "dwnl:mode=probe", "--skip-download", "--", "https://www.youtube.com/watch?v=dwnl-private-self-test")
+			if err := ValidateExecSpec(ports.ExecSpec{Executable: ports.YTDLP, Args: args, Dir: root}); err == nil {
+				t.Fatalf("accepted unsupported YouTube client set %q", client)
+			}
+		})
 	}
 }
 

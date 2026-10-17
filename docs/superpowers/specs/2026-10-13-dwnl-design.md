@@ -12,6 +12,8 @@ Uma extensão Chrome Manifest V3 para uso pessoal no Windows, com interface cent
 
 YouTube, Instagram, TikTok e X são as quatro plataformas inicialmente pretendidas. Só entram no escopo vídeos públicos acessíveis sem contas, cookies ou controles de acesso a contornar. Conteúdo público ou sem DRM não implica autorização de download: direitos sobre a mídia e permissão para o método de acesso também precisam ser respeitados. Disponibilidade dos extratores varia por URL, data e plataforma. Não há promessa de suporte universal.
 
+**Atualização autorizada em 16/10/2026:** o usuário respondeu “Permitir a sessão anônima temporária” à proposta de verificação anônima do extrator oficial do TikTok com cookies somente em memória, sem usar sua conta ou os cookies do Chrome. Essa exceção substitui o limite anterior sem cookies somente para essa sessão transitória do TikTok. Não autoriza importar credenciais/sessões pessoais, persistir cookies, acessar conteúdo privado/DRM, contornar login/idade ou usar outros desafios/provedores externos. As validações de rede, arquivos e processos continuam aplicáveis. O consentimento e as verificações dessa etapa ficam em `.superpowers/sdd/dwnl-tiktok-session-20261016/`.
+
 O protótipo não terá backend nosso, conta Dwnl, telemetria, serviço no início do Windows, servidor em localhost ou download automático de canais/playlists. Posts com múltiplos vídeos oferecem escolha de um item, sem baixar todos automaticamente. Fotos, transmissões ao vivo e mídia sem duração finita não fazem parte deste primeiro escopo.
 
 Distribuição pública e Chrome Web Store exigiriam avaliação própria de finalidade, privacidade, licenças e políticas. O desenho pessoal não comprova elegibilidade para publicação.
@@ -39,6 +41,7 @@ Distribuição pública e Chrome Web Store exigiriam avaliação própria de fin
 ### 2.3 MP3
 
 - Buscar a melhor fonte de áudio disponível para o item selecionado; baixar vídeo completo somente quando necessário para obter seu áudio.
+- Usar o áudio do próprio clipe. Uma música de biblioteca associada ao post não substitui voz, mixagem ou silêncio do vídeo; sua URL separada não é uma fonte equivalente de MP3.
 - Converter para MP3 com bitrate de saída constante: 192 kbps por padrão; opções 128 e 320 kbps.
 - Rotular esses valores como **taxa de saída MP3**. Eles não são a qualidade nativa da plataforma e não recuperam fidelidade ausente.
 - Usar FFmpeg com encoder MP3 compatível; o pacote deve verificar a capacidade, além da versão. Reamostragem pode ocorrer quando necessária ao encoder, sem promessa de melhoria.
@@ -157,7 +160,7 @@ O JavaScript da extensão permanece empacotado. Atualizações do motor não ser
 - Redirecionamentos e URLs de mídia obtidas pelo extrator também precisam de validação. Os domínios CDN permitidos serão documentados por adaptador; validar destino resolvido/conectado e bloquear destinos internos. Um hostname público sozinho não resolve DNS rebinding.
 - A integração precisa demonstrar que essas restrições valem para as requisições do motor, não só para a URL inicial. Se o motor escolhido não permitir garantir uma restrição necessária, essa capacidade fica bloqueada até resolver a integração.
 - Invocar executáveis de caminhos privados fixos, sem shell e sem concatenação de comandos. IDs/opções devem pertencer à análise e à sessão atual.
-- Isolar configurações/plugins herdados; não permitir execução pós-download arbitrária, credenciais de navegador, netrc, proxies para contornar bloqueios, DRM, paywalls ou desafios de autenticação/anti-bot.
+- Isolar configurações/plugins herdados; não permitir execução pós-download arbitrária, credenciais de navegador, netrc, proxies para contornar bloqueios, DRM, paywalls ou desafios de autenticação. A única exceção para verificação anônima é a sessão TikTok autorizada na seção 1, com dados somente em memória.
 - O pacote EJS é uma dependência técnica, não autorização para contornar controles ou aceitar condições de uso indevidas.
 
 ### 7.3 Caminhos e dados
@@ -241,6 +244,8 @@ Todos os critérios abaixo são requisitos futuros. Nenhum teste de produto, ins
 Em fixtures com duração conhecida, saída deve diferir no máximo por max(0,5 segundo, 1% da duração); a fixture audiovisual deve permitir observar sincronização com diferença de até 100 ms. Qualquer exceção de contêiner/encoder deve ser registrada e revisada, não tratada como teste aprovado silenciosamente.
 
 ### 9.1 Matriz por plataforma
+
+Esta tabela preserva o planejamento de 13/10/2026. Os resultados posteriores, incluindo recusas e correções, estão nos relatórios datados de `docs/validation/`; ela não descreve a instalação atual.
 
 | Plataforma | Evidência atual | Condição para declarar validada |
 |---|---|---|
