@@ -124,7 +124,7 @@ function New-DwnlBootstrapStage {
     $acquire+='end;';$verify+='end;';$delete+='end;'
     Write-DwnlUTF8 (Join-Path $out 'payload-files.iss') ($sourceLines -join "`r`n")
     Write-DwnlUTF8 (Join-Path $out 'supplier-acquisition.iss') (($acquire+$verify+$delete) -join "`r`n")
-    $owned=@($files+$supplierFiles.path+'native-host.json' | ForEach-Object {"'"+$_.Replace('/','\')+"'"})
+    $owned=@($files+$supplierFiles.path+'native-host.json'+'.dwnl-install-owner' | ForEach-Object {"'"+$_.Replace('/','\')+"'"})
     Write-DwnlUTF8 (Join-Path $out 'owned-paths.iss') ('Files := ['+($owned -join ', ')+'];')
     $report=[ordered]@{schemaVersion=1;packageMode='supplier-acquisition';redistributionReady=$false;completeCorrespondingSource=$false;identity=$identity;host=$hostMetadata;payloadFiles=$files;payloadHashes=$hashes;supplierFiles=$supplierFiles;compiledInstaller=$null;installedOrRegistered=$false}
     Write-DwnlUTF8 (Join-Path $out 'package-report.json') ($report | ConvertTo-Json -Depth 40)

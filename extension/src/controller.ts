@@ -1,6 +1,8 @@
 import { decodeMessage, decodeRequest, HOST_NAME, ProtocolDecodeError, type NativeClient, type Operation, type PayloadByOperation, type Response, type JobEvent } from './protocol.js';
 import type { BrowserPort } from './browser.js';
 import { createInitialState, isTerminal, markStartPending, reduceState, restoreCache, serializeCache, type AppState, type ConnectionState } from './state.js';
+// The engine budgets 90 seconds for analysis; leave bounded cleanup/response time.
+const ANALYSIS_TIMEOUT_MS = 120000;
 export class NativeTransportError extends Error { constructor(public readonly reason: ConnectionState | 'timeout', message = reason) { super(message); } }
 export class ChromeNativeClient implements NativeClient {
   private port?: BrowserPort;
@@ -29,7 +31,8 @@ export class ChromeNativeClient implements NativeClient {
       let resolve!: (value: Response) => void;
       let reject!: (error: unknown) => void;
       const promise = new Promise<Response>((yes, no) => { resolve = yes; reject = no; });
-      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new NativeTransportError('timeout')); }, operation === 'chooseDestination' ? Math.max(this.timeoutMs, 300000) : this.timeoutMs);
+      const timeoutMs = operation === 'analyze' ? Math.max(this.timeoutMs, ANALYSIS_TIMEOUT_MS) : operation === 'chooseDestination' ? Math.max(this.timeoutMs, 300000) : this.timeoutMs;
+      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new NativeTransportError('timeout')); }, timeoutMs);
       this.pending.set(requestId, { signature, operation, promise, resolve, reject, timer });
       try { this.port.postMessage(request); } catch { this.failConnection('disconnected'); }
       return promise;

@@ -17,7 +17,7 @@ OutputDir={#PackageRoot}
 OutputBaseFilename=Dwnl-Setup
 Compression=lzma2/fast
 SolidCompression=yes
-ArchiveExtraction=enhanced/nopassword
+#include "bootstrap-archive-settings.iss"
 CloseApplications=no
 RestartApplications=no
 ChangesEnvironment=no
@@ -34,12 +34,8 @@ var
   WasOwnedInstallation, NativeKeyExisted: Boolean;
 const
   NativeKey = 'Software\Google\Chrome\NativeMessagingHosts\com.dwnl.host';
-  GenericWrite = $40000000;
-  OpenExisting = 3;
-  FileAttributeNormal = $80;
-  InvalidHandleValue = -1;
-  FileAttributeReparsePoint = $400;
-  InvalidFileAttributes = $FFFFFFFF;
+
+#include "bootstrap-ownership.iss"
 
 procedure InitializeWizard();
 begin
@@ -47,74 +43,28 @@ begin
   DownloadPage.ShowBaseNameInsteadOfUrl := True;
 end;
 
-function CreateFileW(FileName: string; Access, Share: Cardinal; Security: Integer;
-  Creation, Flags: Cardinal; Template: Integer): THandle;
-  external 'CreateFileW@kernel32.dll stdcall';
-function CloseHandle(Handle: THandle): Boolean;
-  external 'CloseHandle@kernel32.dll stdcall';
-function GetFileAttributesW(FileName: string): Cardinal;
-  external 'GetFileAttributesW@kernel32.dll stdcall';
-
-function IsReparsePath(Path: string): Boolean;
-var Attributes: Cardinal; Cursor: string;
-begin
-  Result := False; Cursor := Path;
-  while Length(Cursor) > 3 do begin
-    Attributes := GetFileAttributesW(Cursor);
-    if (Attributes <> InvalidFileAttributes) and ((Attributes and FileAttributeReparsePoint) <> 0) then begin
-      Result := True; Exit;
-    end;
-    Cursor := ExtractFileDir(Cursor);
-  end;
-end;
-
-function JsonEscape(Value: string): string;
-begin
-  Result := Value;
-  StringChangeEx(Result, '\', '\\', True);
-  StringChangeEx(Result, '"', '\"', True);
-end;
-
 function ExpectedManifest(): string;
 begin
-  Result := '{' + #10 + '  "name": "com.dwnl.host",' + #10 +
-    '  "description": "Dwnl private native helper",' + #10 +
-    '  "path": "' + JsonEscape(ExpandConstant('{app}\dwnl-host.exe')) + '",' + #10 +
-    '  "type": "stdio",' + #10 +
-    '  "allowed_origins": ["chrome-extension://{#ExtensionId}/"]' + #10 + '}' + #10;
+  Result := ExpectedManifestFor(ExpandConstant('{app}'));
 end;
 
 function ManifestMatches(): Boolean;
-var ManifestPath: string; Bytes: AnsiString;
 begin
-  Result := False; ManifestPath := ExpandConstant('{app}\native-host.json');
-  if IsReparsePath(ManifestPath) then Exit;
-  if not LoadStringFromFile(ManifestPath, Bytes) then Exit;
-  Result := Bytes = UTF8Encode(ExpectedManifest());
+  Result := ManifestMatchesFor(ExpandConstant('{app}'));
 end;
 
 function OwnedManifest(): Boolean;
 var Registered: string;
 begin
   Result := RegQueryStringValue(HKCU, NativeKey, '', Registered) and
-    (CompareText(Registered, ExpandConstant('{app}\native-host.json')) = 0) and ManifestMatches();
+    RegistrationMatchesFor(ExpandConstant('{app}'), Registered);
 end;
 
 function OwnedFilesInactive(): Boolean;
-var Files: TArrayOfString; I: Integer; Path: string; Handle: THandle;
+var Files: TArrayOfString;
 begin
-  Result := False;
   #include PackageRoot + "\owned-paths.iss"
-  for I := 0 to GetArrayLength(Files) - 1 do begin
-    Path := AddBackslash(ExpandConstant('{app}')) + Files[I];
-    if IsReparsePath(Path) then Exit;
-    if FileExists(Path) then begin
-      Handle := CreateFileW(Path, GenericWrite, 0, 0, OpenExisting, FileAttributeNormal, 0);
-      if Handle = InvalidHandleValue then Exit;
-      CloseHandle(Handle);
-    end;
-  end;
-  Result := True;
+  Result := FilesInactiveFor(ExpandConstant('{app}'), Files);
 end;
 
 procedure RequireHash(Path, Expected: string);
@@ -123,27 +73,15 @@ begin
     RaiseException('A pinned Dwnl supplier/payload hash did not match. No registration was created.');
 end;
 
-procedure DeleteIfOwned(Path, Expected: string);
-begin
-  if not IsReparsePath(Path) and FileExists(Path) and (CompareText(GetSHA256OfFile(Path), Expected) = 0) then
-    DeleteFile(Path);
-end;
-
 #include PackageRoot + "\supplier-acquisition.iss"
 
 function PrepareToInstall(var NeedsRestart: Boolean): string;
 var Registered: string;
 begin
-  Result := '';
-  if IsReparsePath(ExpandConstant('{app}')) then begin
-    Result := 'Dwnl refuses reparse paths.'; Exit;
-  end;
-  if RegValueExists(HKCU, NativeKey, '') and not OwnedManifest() then begin
-    Result := 'An existing native-host registration is not owned by this Dwnl setup.'; Exit;
-  end;
-  if DirExists(ExpandConstant('{app}')) and not OwnedManifest() then begin
-    Result := 'An existing Dwnl directory could not be proven owned. Its files were preserved.'; Exit;
-  end;
+  RegQueryStringValue(HKCU, NativeKey, '', Registered);
+  Result := InstallationProblem(ExpandConstant('{app}'), ExpandConstant('{localappdata}\Dwnl'),
+    RegValueExists(HKCU, NativeKey, ''), Registered);
+  if Result <> '' then Exit;
   if not OwnedFilesInactive() then begin
     Result := 'Close Dwnl jobs before updating. No process was terminated.'; Exit;
   end;
@@ -152,6 +90,13 @@ begin
   try
     AcquireSuppliers();
     // All download/hash/extraction failures occur before the install step.
+    Registered := '';
+    RegQueryStringValue(HKCU, NativeKey, '', Registered);
+    if not OwnedFilesInactive() then begin
+      Result := 'Close Dwnl jobs before updating. No process was terminated.'; Exit;
+    end;
+    Result := PrepareOwnedDirectory(ExpandConstant('{app}'), ExpandConstant('{localappdata}\Dwnl'),
+      RegValueExists(HKCU, NativeKey, ''), Registered);
   except
     Result := GetExceptionMessage();
   end;
@@ -168,11 +113,12 @@ begin
   if not RegWriteStringValue(HKCU, NativeKey, '', ManifestPath) then begin
     // Compensate only a new manifest/registration still matching our write.
     // Preserve an existing working installation and third-party replacements.
+    // Keep the path-bound ownership marker, allowing a safe retry of a failed copy/registration.
     if not WasOwnedInstallation and ManifestMatches() then begin
       if RegQueryStringValue(HKCU, NativeKey, '', Registered) and
          (CompareText(Registered, ManifestPath) = 0) then RegDeleteValue(HKCU, NativeKey, '');
       if not NativeKeyExisted then RegDeleteKeyIfEmpty(HKCU, NativeKey);
-      DeleteFile(ManifestPath);
+      CompensateNewManifestFor(ExpandConstant('{app}'), WasOwnedInstallation);
     end;
     RaiseException('Native-host registration failed.');
   end;
@@ -185,10 +131,12 @@ begin
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var Registered: string;
 begin
   if (CurUninstallStep <> usUninstall) or not OwnedManifest() then Exit;
   DeleteOwnedPayload();
-  if DeleteFile(ExpandConstant('{app}\native-host.json')) then begin
+  RegQueryStringValue(HKCU, NativeKey, '', Registered);
+  if DeleteOwnedManifestFor(ExpandConstant('{app}'), Registered) then begin
     RegDeleteValue(HKCU, NativeKey, ''); RegDeleteKeyIfEmpty(HKCU, NativeKey);
   end;
   RemoveDir(ExpandConstant('{app}\bin'));

@@ -4,14 +4,21 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mountPopup, type PopupOptions } from '../src/popup.js';
 import { NativeTransportError } from '../src/controller.js';
 import { createInitialState, reduceState } from '../src/state.js';
-import type { JobEvent, NativeClient, Operation, PayloadByOperation, ProtocolError, Response } from '../src/protocol.js';
+import type { Dependency, JobEvent, NativeClient, Operation, PayloadByOperation, ProtocolError, Response } from '../src/protocol.js';
 import { analysis, choices, handshake, job, response, startFailure } from './fixtures.js';
 
 const html = readFileSync('extension/popup.html', 'utf8');
+const availableDependencies: Dependency[] = [
+  { name: 'yt-dlp', version: 'fixture', available: true },
+  { name: 'deno', version: 'fixture', available: true },
+  { name: 'ffmpeg', version: 'fixture', available: true },
+  { name: 'ffprobe', version: 'fixture', available: true },
+];
 class HostFixture implements NativeClient {
   listeners = new Set<(message: Response | JobEvent) => void>();
   media = analysis();
   capabilities = handshake.capabilities;
+  dependencies = handshake.dependencies;
   failure?: 'missing-host' | 'incompatible';
   startError?: ProtocolError['code'];
   deferredOperation?: Operation;
@@ -21,7 +28,7 @@ class HostFixture implements NativeClient {
     if (this.failure) throw new NativeTransportError(this.failure);
     this.requests.push({ operation, payload, requestId });
     if (operation === this.deferredOperation && this.deferredResponse) return this.deferredResponse;
-    if (operation === 'handshake') return response('handshake', { ...handshake, capabilities: this.capabilities }, requestId);
+    if (operation === 'handshake') return response('handshake', { ...handshake, capabilities: this.capabilities, dependencies: this.dependencies }, requestId);
     if (operation === 'analyze') return response('analyze', this.media, requestId);
     if (operation === 'status') return response('status', { snapshot: null }, requestId);
     if (operation === 'cancel') return response('cancel', { snapshot: job({ sequence: 2, state: 'canceling' }) }, requestId);
@@ -81,11 +88,41 @@ describe('Portuguese popup', () => {
     host.emit({ protocolVersion: 1, kind: 'event', hostSessionId: 'session-a', jobId: 'job-a', sequence: 3, state: 'canceled' });
     expect(element('job-state').textContent).toBe('Cancelado');
   });
-  it('networkAccess false shows an honest gate and keeps real analysis disabled', async () => {
-    const host = new HostFixture(); host.capabilities = { video: true, mp3: true, networkAccess: false }; await setup(host);
+  it('networkAccess false with present dependencies reports unavailable extraction without historical claims', async () => {
+    const host = new HostFixture(); host.dependencies = availableDependencies;
+    host.capabilities = { video: true, mp3: true, networkAccess: false }; await setup(host);
     expect(element('network-notice').hidden).toBe(false); expect(element<HTMLButtonElement>('analyze').disabled).toBe(true);
-    expect(element('network-notice').textContent).toContain('bloqueada');
+    expect(element('network-notice').textContent).toMatch(/extração.*indisponível/i);
+    expect(element('network-notice').textContent).not.toMatch(/ainda precisa ser validada|nenhuma plataforma|dependências indisponíveis/i);
     expect(element<HTMLButtonElement>('install').hidden).toBe(true);
+  });
+  it('missing FFmpeg is visible even with network access while capability restrictions remain enforced', async () => {
+    const host = new HostFixture(); host.capabilities = { video: false, mp3: false, networkAccess: true };
+    host.dependencies = availableDependencies.map(dependency => dependency.name === 'ffmpeg'
+      ? { ...dependency, available: false, version: '<img src=x onerror=alert(1)>' } : dependency);
+    await setup(host);
+    expect(element('network-notice').hidden).toBe(false);
+    expect(element('network-notice').textContent).toContain('ffmpeg');
+    expect(element('network-notice').textContent).toMatch(/reinstale.*pacote Dwnl/i);
+    expect(element('network-notice').textContent).not.toMatch(/deno|ffprobe|yt-dlp|<img|onerror/);
+    expect(element('network-notice').querySelector('img')).toBeNull();
+    expect(element<HTMLButtonElement>('analyze').disabled).toBe(false);
+    await analyze();
+    expect(element<HTMLButtonElement>('mode-video').disabled).toBe(true);
+    expect(element<HTMLButtonElement>('mode-mp3').disabled).toBe(true);
+    expect(element<HTMLButtonElement>('start').disabled).toBe(true);
+  });
+  it('missing Deno is named with reinstall guidance while network capability keeps analysis disabled', async () => {
+    const host = new HostFixture(); host.capabilities = { video: true, mp3: true, networkAccess: false };
+    host.dependencies = availableDependencies.map(dependency => dependency.name === 'deno' ? { ...dependency, available: false, version: 'unavailable' } : dependency);
+    await setup(host);
+    expect(element('network-notice').hidden).toBe(false);
+    expect(element('network-notice').textContent).toContain('deno');
+    expect(element('network-notice').textContent).toMatch(/reinstale.*pacote Dwnl/i);
+    expect(element('network-notice').textContent).not.toMatch(/ffmpeg|ffprobe|yt-dlp|nenhuma plataforma|ainda precisa ser validada/i);
+    expect(element<HTMLButtonElement>('analyze').disabled).toBe(true);
+    element('source-form').dispatchEvent(new Event('submit', { cancelable: true })); await tick();
+    expect(host.requests.some(request => request.operation === 'analyze')).toBe(false);
   });
   it('title metadata is rendered as text and closing UI unsubscribes without canceling', async () => {
     const host = new HostFixture(); host.media.items[0].title = '<img src=x onerror=alert(1)>'; await setup(host); await analyze();
@@ -117,7 +154,7 @@ describe('Portuguese popup', () => {
   it('typed restriction errors never render raw diagnostics or signed media URLs', async () => {
     const host = await setup(); await analyze(); element<HTMLButtonElement>('start').click(); await tick();
     host.emit({ protocolVersion: 1, kind: 'event', hostSessionId: 'session-a', jobId: 'job-a', sequence: 1, state: 'failed', error: { code: 'ACCESS_RESTRICTED', message: 'secret-token https://cdn.example/stream?token=secret-token', retryable: false } });
-    expect(element('job-detail').textContent).toContain('acesso restrito');
+    expect(element('job-detail').textContent).toBe('A plataforma bloqueou o acesso a este conteúdo.');
     expect(document.body.textContent).not.toContain('secret-token');
   });
   it.each(['no-job', 'old-unconfirmed', 'old-confirmed'] as const)('typed start rejection allows analyzing again without reopening (%s)', async prior => {

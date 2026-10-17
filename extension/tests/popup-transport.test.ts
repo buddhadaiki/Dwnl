@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChromeNativeClient, ExtensionController } from '../src/controller.js';
 import type { BrowserPort } from '../src/browser.js';
-import type { Request } from '../src/protocol.js';
+import type { Request, Response } from '../src/protocol.js';
 import { startPayload } from '../src/state.js';
 import { analysis, job, handshake, response, startFailure } from './fixtures.js';
 
-function endpoint() {
+function endpoint(timeoutMs?: number) {
   const messages = new Set<(message: unknown) => void>();
   const disconnects = new Set<() => void>();
   const sent: Request[] = [];
@@ -14,7 +14,7 @@ function endpoint() {
     onMessage: { addListener(listener) { messages.add(listener); }, removeListener(listener) { messages.delete(listener); } },
     onDisconnect: { addListener(listener) { disconnects.add(listener); }, removeListener(listener) { disconnects.delete(listener); } } };
   let connections = 0;
-  return { sent, port, client: new ChromeNativeClient(() => { connections++; return port; }, () => undefined, 12), connections: () => connections,
+  return { sent, port, client: new ChromeNativeClient(() => { connections++; return port; }, () => undefined, timeoutMs), connections: () => connections,
     receive(value: unknown) { messages.forEach(listener => listener(value)); }, route(handler: (request: Request) => void) { process = handler; } };
 }
 async function connect(native: ReturnType<typeof endpoint>) {
@@ -22,6 +22,48 @@ async function connect(native: ReturnType<typeof endpoint>) {
   native.receive(response('handshake', handshake, 'hello'));
   return pending;
 }
+describe('native request deadlines', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
+
+  it('delivers an analysis response after the engine has used its full 90-second budget', async () => {
+    const native = endpoint(); await connect(native);
+    const result = native.client.request('analyze', { url: 'https://youtu.be/public' }, 'slow-analysis')
+      .then(response => ({ response }), error => ({ error }));
+    await vi.advanceTimersByTimeAsync(90001);
+    native.receive(response('analyze', analysis(), 'slow-analysis'));
+    expect(await result).toMatchObject({ response: { operation: 'analyze', result: { analysisId: 'analysis-a' } } });
+  });
+
+  it('rejects an unanswered analysis after the engine budget and a finite response margin', async () => {
+    const native = endpoint(); await connect(native);
+    let outcome: { response?: Response; error?: unknown } | undefined;
+    const finished = native.client.request('analyze', { url: 'https://youtu.be/public' }, 'unanswered-analysis')
+      .then(response => { outcome = { response }; }, error => { outcome = { error }; });
+    await vi.advanceTimersByTimeAsync(119999);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    await finished;
+    expect(outcome).toMatchObject({ error: { reason: 'timeout' } });
+  });
+
+  it.each([
+    { operation: 'status', deadlineMs: 30000 },
+    { operation: 'chooseDestination', deadlineMs: 300000 },
+  ] as const)('keeps the existing $operation deadline', async ({ operation, deadlineMs }) => {
+    const native = endpoint(); await connect(native);
+    let outcome: { response?: Response; error?: unknown } | undefined;
+    const pending = operation === 'status' ? native.client.request('status', {}, 'unanswered-request')
+      : native.client.request('chooseDestination', { userGesture: true }, 'unanswered-request');
+    const finished = pending.then(response => { outcome = { response }; }, error => { outcome = { error }; });
+    await vi.advanceTimersByTimeAsync(deadlineMs - 1);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    await finished;
+    expect(outcome).toMatchObject({ error: { reason: 'timeout' } });
+  });
+});
+
 describe('popup native transport and worker ownership', () => {
   it('one native connection validates responses and correlates operation/request identity', async () => {
     const native = endpoint();
@@ -57,7 +99,7 @@ describe('popup native transport and worker ownership', () => {
     await expect(request).rejects.toMatchObject({ reason: 'missing-host', message: 'missing-host' });
   });
   it('lost acknowledgement queries status by the original start identity without resending start', async () => {
-    const native = endpoint();
+    const native = endpoint(12);
     native.route(request => {
       if (request.operation === 'handshake') native.receive(response('handshake', handshake, request.requestId));
       if (request.operation === 'status') native.receive(response('status', { snapshot: 'startRequestId' in request.payload ? job({ startRequestId: request.payload.startRequestId }) : null }, request.requestId));

@@ -48,6 +48,8 @@ func executableName(role ports.ExecutableRole) (string, error) {
 // NewRunner accepts a host-owned private directory, never executable paths or
 // role names supplied by Native Messaging. Dependency hashes are verified by
 // packaging; this boundary rechecks and pins local non-reparse paths on Run.
+// Missing files remain unavailable to Run but do not prevent the engine from
+// reporting the other dependencies and capabilities in a diagnostic handshake.
 func NewRunner(privateBinDir string) (ports.ProcessRunner, error) {
 	if err := CheckPath(privateBinDir, false); err != nil {
 		return nil, fmt.Errorf("private executable directory: %w", err)
@@ -59,10 +61,13 @@ func NewRunner(privateBinDir string) (ports.ProcessRunner, error) {
 	for _, role := range []ports.ExecutableRole{ports.YTDLP, ports.Deno, ports.FFmpeg, ports.FFprobe} {
 		name, _ := executableName(role)
 		path := filepath.Join(privateBinDir, name)
-		if err := CheckPath(path, false); err != nil {
+		if err := CheckPath(path, true); err != nil {
 			return nil, fmt.Errorf("private dependency %s: %w", role, err)
 		}
 		info, err := os.Stat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
 		if err != nil || !info.Mode().IsRegular() {
 			return nil, fmt.Errorf("private dependency %s is unavailable", role)
 		}

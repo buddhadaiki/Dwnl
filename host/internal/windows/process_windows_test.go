@@ -299,8 +299,8 @@ func TestRunnerRejectsUnknownRolesAndInvalidPaths(t *testing.T) {
 	if _, err := NewRunner("relative"); err == nil {
 		t.Fatal("relative executable root accepted")
 	}
-	if _, err := NewRunner(t.TempDir()); err == nil {
-		t.Fatal("root without fixed dependencies accepted")
+	if _, err := NewRunner(filepath.Join(t.TempDir(), "absent")); err == nil {
+		t.Fatal("missing executable root accepted")
 	}
 	runner, err := NewRunner(bin)
 	if err != nil {

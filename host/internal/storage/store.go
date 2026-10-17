@@ -103,6 +103,18 @@ func Open(root string) (*Store, error) {
 	return s, nil
 }
 func (s *Store) Root() string { return s.root }
+
+// InitializeOwnership claims a validated empty state root before other host
+// components create private work directories there. Open remains read-only.
+func (s *Store) InitializeOwnership() error {
+	return s.locked(func() error {
+		if _, err := s.read(); err != nil {
+			return err
+		}
+		return s.ensure()
+	})
+}
+
 func (s *Store) locked(fn func() error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
