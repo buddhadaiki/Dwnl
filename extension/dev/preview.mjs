@@ -2,7 +2,8 @@ import { mountPopup } from '../../dist/extension/src/popup.js';
 import { NativeTransportError } from '../../dist/extension/src/controller.js';
 import { createInitialState, reduceState } from '../../dist/extension/src/state.js';
 
-const original = await (await fetch('../popup.html')).text();
+const popupUrl = new URL('../popup.html', import.meta.url);
+const original = await (await fetch(popupUrl)).text();
 const popupBody = /<body>([\s\S]*?)<\/body>/.exec(original)[1];
 const target = document.getElementById('preview-popup');
 const scenario = document.getElementById('scenario');
@@ -59,7 +60,11 @@ class SyntheticTransport {
   progress(state, sequence, percent) { this.emit({ protocolVersion: 1, kind: 'event', hostSessionId: 'session-preview', jobId: 'job-preview', sequence, state, progress: { stage: state, ...(percent !== undefined ? { completedBytes: 420, totalBytes: 1000, percent } : {}) } }); }
   stop() { this.timers.splice(0).forEach(clearTimeout); }
 }
-function show() { target.innerHTML = popupBody; mounted = mountPopup(document, { client: fixture, currentTab: async () => 'https://www.youtube.com/watch?v=preview' }); }
+function show() {
+  target.innerHTML = popupBody;
+  for (const image of target.querySelectorAll('img[src]')) image.src = new URL(image.getAttribute('src'), popupUrl).href;
+  mounted = mountPopup(document, { client: fixture, currentTab: async () => 'https://www.youtube.com/watch?v=preview' });
+}
 function reset() { mounted?.dispose(); fixture?.stop(); fixture = new SyntheticTransport(scenario.value); open = true; document.getElementById('toggle-panel').textContent = 'Fechar painel'; show(); }
 scenario.addEventListener('change', reset);
 document.getElementById('toggle-panel').addEventListener('click', () => { open = !open; if (open) show(); else { mounted?.dispose(); target.innerHTML = ''; } document.getElementById('toggle-panel').textContent = open ? 'Fechar painel' : 'Reabrir painel'; });

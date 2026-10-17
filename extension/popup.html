@@ -10,7 +10,7 @@
 <body>
   <main id="app">
     <header class="header">
-      <div class="brand"><span class="brand-icon" aria-hidden="true">↧</span><span>Dwnl<span class="brand-dot">.</span></span></div>
+      <div class="brand"><img class="brand-icon" src="assets/icons/icon-128.png" width="35" height="35" alt="" aria-hidden="true"><span>Dwnl<span class="brand-dot">.</span></span></div>
       <span id="connection" class="connection">Conectando</span>
     </header>
     <section class="intro"><p class="eyebrow">SEU ARQUIVO, NO SEU COMPUTADOR</p><h1>Do link para a sua pasta.</h1><p>Escolha o vídeo ou leve só o áudio.</p></section>
@@ -21,7 +21,7 @@
       <button id="install" type="button" hidden>Baixar instalador do Dwnl</button>
       <button id="reconnect" type="button" class="secondary">Tentar conectar</button>
     </section>
-    <div id="network-notice" class="notice" hidden>Extração de sites bloqueada nesta versão: a proteção de rede do motor ainda precisa ser validada. Nenhuma plataforma foi confirmada por este protótipo.</div>
+    <div id="network-notice" class="notice" role="status" hidden></div>
     <div id="error" class="notice error" role="alert" hidden></div>
     <form id="source-form" class="source-card">
       <div class="section-label"><span class="step">01</span><label for="url">Link do conteúdo</label></div>

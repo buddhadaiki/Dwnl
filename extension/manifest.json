@@ -5,6 +5,7 @@
   "description": "Salve vídeos públicos autorizados ou áudio MP3 com o auxiliar local Dwnl.",
   "permissions": ["nativeMessaging", "storage", "activeTab"],
   "background": { "service_worker": "src/service-worker.js", "type": "module" },
-  "action": { "default_popup": "popup.html", "default_title": "Dwnl" },
+  "icons": { "16": "assets/icons/icon-16.png", "32": "assets/icons/icon-32.png", "48": "assets/icons/icon-48.png", "128": "assets/icons/icon-128.png" },
+  "action": { "default_popup": "popup.html", "default_title": "Dwnl", "default_icon": { "16": "assets/icons/icon-16.png", "32": "assets/icons/icon-32.png", "48": "assets/icons/icon-48.png", "128": "assets/icons/icon-128.png" } },
   "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'" }
 }

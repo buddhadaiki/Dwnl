@@ -14,7 +14,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 25px; }
 .brand { display: flex; align-items: center; gap: 9px; font-size: 30px; font-weight: 780; letter-spacing: -1.8px; }
 .brand-dot { color: #639351; }
-.brand-icon { background: var(--ink); color: var(--accent); border-radius: 11px; font-size: 25px; font-weight: 500; line-height: 35px; text-align: center; height: 35px; width: 35px; letter-spacing: 0; }
+.brand-icon { display: block; height: 35px; width: 35px; flex-shrink: 0; }
 .connection { font-size: 10px; font-weight: 650; background: #e6e9e1; border-radius: 20px; padding: 7px 10px; color: #566059; }
 .connection[data-state='connected'] { background: #e4efd5; color: #3b6049; }
 .connection[data-state='missing-host'], .connection[data-state='incompatible'] { background: #faebd8; color: #8b5422; }
