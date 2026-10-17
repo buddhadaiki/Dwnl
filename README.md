@@ -1,6 +1,6 @@
 # Dwnl
 
-<img src="docs/branding/dwnl-logo.png" width="96" height="96" alt="Logo Dwnl: d com seta de download em verde-lima e grafite">
+<img src="docs/branding/dwnl-logo.png" width="96" height="96" alt="Logo Dwnl: seta azul de download sobre uma bandeja">
 
 Protótipo pessoal para Windows: uma extensão Chrome Manifest V3 em TypeScript controla um auxiliar Go por Native Messaging. O auxiliar usa cópias privadas de yt-dlp, Deno, FFmpeg e ffprobe. Não há backend, serviço ou telemetria.
 
