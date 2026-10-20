@@ -28,7 +28,7 @@ func failureDiagnostic(err error) string {
 	var failure *hostFailure
 	if errors.As(err, &failure) {
 		switch failure.stage {
-		case "origin", "runner", "paths", "engine", "store", "destination", "session", "transport":
+		case "origin", "runner", "paths", "engine", "store", "destination", "session", "transport", "installation":
 			stage = failure.stage
 		}
 	}

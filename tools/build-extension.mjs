@@ -7,16 +7,31 @@ import { createHash } from 'node:crypto';
 const root = await realpath(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 const source = path.join(root, 'extension');
 const dist = path.join(root, 'dist');
-const output = path.join(dist, 'extension');
 const markerName = '.dwnl-extension-build';
 const marker = 'Dwnl owned extension build v1\n';
 const identity = JSON.parse(await readFile(path.join(root, 'contracts/extension-identity.json'), 'utf8'));
 const manifest = JSON.parse(await readFile(path.join(source, 'manifest.json'), 'utf8'));
 const args=process.argv.slice(2);
-if(args.length && (args.length!==2 || args[0]!=='--installer')) throw new Error('Use --installer <verified bootstrap path>.');
+const options = new Map();
+for (let i = 0; i < args.length; i += 2) {
+  if (!['--installer', '--output'].includes(args[i]) || !args[i + 1] || options.has(args[i])) throw new Error('Use --installer <verified bootstrap path> and/or --output <fresh dist directory>.');
+  options.set(args[i], args[i + 1]);
+}
+const output = path.resolve(options.get('--output') ?? path.join(dist, 'extension'));
+if (!output.startsWith(dist + path.sep) || output === path.join(dist, 'helper')) throw new Error('Extension output must be a child of dist.');
+// Custom outputs are fresh staging directories; never replace a loaded extension.
+if (options.has('--output')) {
+  let cursor = output;
+  while (cursor !== root) {
+    const stat = await exists(cursor);
+    if (stat?.isSymbolicLink()) throw new Error('Extension output contains a link/reparse.');
+    if (cursor === output && stat) throw new Error('Custom extension output already exists.');
+    cursor = path.dirname(cursor);
+  }
+}
 let installer;
-if(args.length) {
-  const input=await realpath(path.resolve(args[1]));
+if(options.has('--installer')) {
+  const input=await realpath(path.resolve(options.get('--installer')));
   if(!input.startsWith(dist+path.sep) || path.basename(input)!=='Dwnl-Setup.exe') throw new Error('Setup must be the owned dist bootstrap artifact.');
   const report=JSON.parse((await readFile(path.join(path.dirname(input),'package-report.json'),'utf8')).replace(/^\uFEFF/,''));
   const bytes=await readFile(input);
@@ -54,7 +69,7 @@ if (await exists(output)) {
   if (await readFile(path.join(output, markerName), 'utf8') !== marker) throw new Error('Build anterior sem marcador de ownership.');
   await rm(output, { recursive: true });
 }
-await mkdir(output);
+await mkdir(output, { recursive: true });
 await writeFile(path.join(output, markerName), marker);
 await writeFile(path.join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 

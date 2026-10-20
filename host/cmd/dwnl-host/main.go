@@ -33,6 +33,11 @@ func run() error {
 	if err != nil {
 		return failAt("paths", err)
 	}
+	releaseUse, err := acquireRuntimeUse(executable)
+	if err != nil {
+		return failAt("installation", err)
+	}
+	defer releaseUse()
 	runner, err := windows.NewRunner(filepath.Join(filepath.Dir(executable), "bin"))
 	if err != nil {
 		return failAt("runner", err)

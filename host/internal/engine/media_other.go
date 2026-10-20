@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"dwnl/host/internal/windows"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,11 +15,13 @@ func hasReparsePoint(path string) bool {
 	return err != nil || info.Mode()&os.ModeSymlink != 0
 }
 func diskFull(err error) bool            { return errors.Is(err, syscall.ENOSPC) }
-func ensureEngineRoot(path string) error { return os.MkdirAll(path, 0700) }
+func ensureEngineRoot(path string) error { return windows.CreateDirectories(path, true) }
 func removeEngineWork(path, owner string) error {
-	body, err := os.ReadFile(filepath.Join(path, ".dwnl-engine-work"))
-	if err != nil || string(body) != owner {
-		return errors.New("engine temporary ownership mismatch")
-	}
-	return os.RemoveAll(path)
+	return windows.RemoveOwnedTree(path, func() error {
+		body, err := os.ReadFile(filepath.Join(path, ".dwnl-engine-work"))
+		if err != nil || string(body) != owner {
+			return errors.New("engine temporary ownership mismatch")
+		}
+		return nil
+	})
 }

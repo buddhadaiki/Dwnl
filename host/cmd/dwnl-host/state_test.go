@@ -10,6 +10,7 @@ import (
 
 	"dwnl/host/internal/contracts"
 	"dwnl/host/internal/engine"
+	"dwnl/host/internal/ports"
 	"dwnl/host/internal/storage"
 	"dwnl/host/internal/testutil"
 	"dwnl/host/internal/windows"
@@ -27,7 +28,7 @@ func TestHostStoreReopensAfterRealDependencyProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"yt-dlp", "deno", "ffmpeg", "ffprobe"} {
-		if _, err = os.Stat(filepath.Join(bin, name+".exe")); err != nil {
+		if _, err = os.Stat(filepath.Join(bin, ports.ExecutableFile(ports.ExecutableRole(name)))); err != nil {
 			t.Skip("private media tools unavailable: " + err.Error())
 		}
 	}

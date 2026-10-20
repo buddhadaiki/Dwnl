@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,7 +36,7 @@ var onlineStaticArgs = []string{"--ignore-config", "--no-config-locations", "--n
 
 func onlineArgs(dir, bin string) []string {
 	a := append([]string{}, onlineStaticArgs...)
-	a = append(a, "deno:"+filepath.Join(bin, "deno.exe"), "--plugin-dirs", filepath.Join(dir, "plugins"), "--use-extractors", "^Dwnl$", "--extractor-args", "twitter:api=syndication", "--extractor-args", "youtube:player_client=visionos,web;fetch_pot=never", "--downloader", "native", "--fixup", "never", "--no-playlist", "--socket-timeout", "15", "--retries", "1", "--fragment-retries", "1", "--concurrent-fragments", "1", "--max-filesize", "5G", "--newline", "--progress-template", "download:DWNL_PROGRESS %(progress.downloaded_bytes)s %(progress.total_bytes)s")
+	a = append(a, "deno:"+filepath.Join(bin, ports.ExecutableFile(ports.Deno)), "--plugin-dirs", filepath.Join(dir, "plugins"), "--use-extractors", "^Dwnl$", "--extractor-args", "twitter:api=syndication", "--extractor-args", "youtube:player_client=visionos,web;fetch_pot=never", "--downloader", "native", "--fixup", "never", "--no-playlist", "--socket-timeout", "15", "--retries", "1", "--fragment-retries", "1", "--concurrent-fragments", "1", "--max-filesize", "5G", "--newline", "--progress-template", "download:DWNL_PROGRESS %(progress.downloaded_bytes)s %(progress.total_bytes)s")
 	return a
 }
 
@@ -45,7 +46,7 @@ func validateOnlineSpec(s ports.ExecSpec) bool {
 		return false
 	}
 	deno := strings.TrimPrefix(a[len(onlineStaticArgs)], "deno:")
-	if !strings.HasPrefix(a[len(onlineStaticArgs)], "deno:") || !filepath.IsAbs(deno) || filepath.Base(deno) != "deno.exe" {
+	if !strings.HasPrefix(a[len(onlineStaticArgs)], "deno:") || !filepath.IsAbs(deno) || filepath.Base(deno) != ports.ExecutableFile(ports.Deno) {
 		return false
 	}
 	base := onlineArgs(s.Dir, filepath.Dir(deno))
@@ -82,6 +83,9 @@ func validateOnlineSpec(s ports.ExecSpec) bool {
 }
 
 func onlineEnvironment(dir, bin string) []string {
+	if runtime.GOOS == "linux" {
+		return []string{"PATH=" + bin + ":/usr/bin:/bin", "HOME=" + dir, "XDG_CONFIG_HOME=" + filepath.Join(dir, "config"), "TMPDIR=" + dir, "TMP=" + dir, "TEMP=" + dir, "DENO_DIR=" + filepath.Join(dir, "deno-cache"), "LANG=C.UTF-8", "PYTHONIOENCODING=utf-8", "PYTHONUTF8=1", "PYTHONDONTWRITEBYTECODE=1"}
+	}
 	values := []string{"PATH=" + bin + string(os.PathListSeparator) + filepath.Join(os.Getenv("SYSTEMROOT"), "System32"), "TEMP=" + dir, "TMP=" + dir, "DENO_DIR=" + filepath.Join(dir, "deno-cache"), "PYTHONIOENCODING=utf-8", "PYTHONUTF8=1", "PYTHONDONTWRITEBYTECODE=1"}
 	for _, key := range []string{"SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "USERPROFILE", "APPDATA", "LOCALAPPDATA"} {
 		if value := os.Getenv(key); value != "" {

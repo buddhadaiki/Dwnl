@@ -61,7 +61,7 @@ export function mountPopup(document: Document, options: PopupOptions): { ready: 
     hide('onboarding', connected || state.connection === 'connecting');
     text('onboarding-title', state.connection === 'incompatible' ? 'Atualize o pacote Dwnl' : state.connection === 'missing-host' ? 'Falta o auxiliar local' : 'Reconecte o auxiliar');
     text('onboarding-detail', state.connection === 'incompatible' ? errorLabels.INCOMPATIBLE_PROTOCOL : state.connection === 'missing-host' ? 'Instale o auxiliar uma vez para salvar arquivos e converter áudio no seu computador.' : 'A conexão terminou. O resultado anterior precisa ser verificado; nenhuma tarefa será reiniciada automaticamente.');
-    text('local-installer', installerInstruction ?? (installerAvailable ? 'Baixe o instalador incluído e abra-o manualmente. Depois, tente conectar novamente.' : 'O instalador não está incluído nesta extensão. Quando houver um instalador validado no pacote local, abra-o e tente conectar novamente. Consulte as instruções do protótipo.'));
+    text('local-installer', installerInstruction ?? (installerAvailable ? 'Baixe o instalador incluído e abra-o manualmente. Depois, tente conectar novamente.' : 'Instale o auxiliar seguindo o LEIA-ME do pacote para seu sistema (Windows ou Ubuntu). Depois, tente conectar novamente.'));
     hide('install', !installerAvailable); disable('install', !!pending); disable('reconnect', !!pending);
     hide('network-notice', !networkBlocked && unavailableDependencies.length === 0);
     text('network-notice', unavailableDependencies.length > 0
@@ -169,7 +169,7 @@ export function mountPopup(document: Document, options: PopupOptions): { ready: 
   }
   listen('reconnect', 'click', reconnect); listen('verify-job', 'click', reconnect);
   listen('clear-history', 'click', () => { if (options.client.clearHistory) options.client.clearHistory(); else { state = { ...state, history: [], ...(state.job && isTerminal(state.job.state) ? { job: undefined } : {}) }; render(); } });
-  listen('install', 'click', async () => { if (!installerAvailable || !options.installer || pending) return; pending = 'installer'; render(); try { await options.installer.download(); installerInstruction = 'Abra o instalador baixado para instalar o auxiliar. Depois, tente conectar novamente.'; } catch { installerInstruction = 'O Chrome não conseguiu copiar o recurso. Abra manualmente installer/Dwnl-Setup.exe no pacote local.'; } finally { pending = undefined; render(); } });
+  listen('install', 'click', async () => { if (!installerAvailable || !options.installer || pending) return; pending = 'installer'; render(); try { await options.installer.download(); installerInstruction = 'Abra o instalador baixado para instalar o auxiliar. Depois, tente conectar novamente.'; } catch { installerInstruction = 'O Chrome não conseguiu copiar o recurso. Abra o instalador do pacote local seguindo o LEIA-ME.'; } finally { pending = undefined; render(); } });
   const timer = setInterval(render, 1000); cleanups.push(() => clearInterval(timer));
   render();
   const ready = (async () => {

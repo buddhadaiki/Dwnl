@@ -2,7 +2,7 @@
 
 <img src="docs/branding/dwnl-logo.png" width="96" height="96" alt="Logo Dwnl: seta azul de download sobre uma bandeja">
 
-Protótipo pessoal para Windows: uma extensão Chrome Manifest V3 em TypeScript controla um auxiliar Go por Native Messaging. O auxiliar usa cópias privadas de yt-dlp, Deno, FFmpeg e ffprobe. Não há backend, serviço ou telemetria.
+Protótipo para Windows e Ubuntu: uma extensão Chrome Manifest V3 em TypeScript controla um auxiliar Go por Native Messaging. No Windows, o auxiliar usa cópias privadas de yt-dlp, Deno, FFmpeg e ffprobe; no Ubuntu, yt-dlp/Deno são privados e FFmpeg/ffprobe vêm dos pacotes do sistema. Não há backend, serviço ou telemetria.
 
 O engine online usa os extratores existentes do yt-dlp através de um adaptador privado com HTTPS, DNS/IP fixados, redirects validados e bloqueio de credenciais/fallback externo. Em 14/10, amostras públicas reais produziram vídeo Instagram e vídeo/MP3 X, confirmados por ffprobe, decodificação integral e readback de hash. YouTube e TikTok chegaram às respectivas CDNs e receberam HTTP 403; nenhum arquivo final foi gerado, e as recusas foram respeitadas. Os testes de mídia sintética também confirmam seleção exata, junção e MP3 por FFmpeg/ffprobe reais. Isso não promete suporte universal.
 
@@ -10,7 +10,35 @@ A [continuidade de 16/10](docs/validation/2026-10-16-completion.md) corrige praz
 
 A [correção de YouTube](docs/validation/2026-10-16-youtube-tiktok.md) substitui o cliente obsoleto e preserva o User-Agent do extrator. O YouTube produziu vídeo completo 1080p e MP3 de 192 kbps, com hashes e decode integral conferidos no r4. A [continuidade TikTok r5](docs/validation/2026-10-16-tiktok-session.md) completa a sessão anônima autorizada em memória e preserva o áudio do próprio clipe. A extensão real concluiu vídeo H.264/AAC e MP3 de 192 kbps do TikTok, com arquivo físico, hash, journal e decode integral conferidos. O helper atual **r5 está fisicamente instalado**; setup `dist/bootstrap-20261017-r5-tiktok/Dwnl-Setup.exe`. Os testes de interface usaram Chrome for Testing isolado; o perfil pessoal permanece carregado pelo usuário. Os resultados r3/r4 acima são históricos, e os casos positivos não garantem todos os vídeos públicos.
 
-## Desenvolvimento local
+## Pacote para GitHub Releases
+
+Para gerar os anexos a partir deste checkout, com as ferramentas locais já preparadas:
+
+```powershell
+pwsh -NoProfile -File ./tools/release.ps1
+```
+
+O comando compila o auxiliar e o setup, gera a extensão em uma pasta separada da extensão carregada no Chrome e confere todos os arquivos dentro do ZIP por SHA-256. A saída é uma pasta nova `dist/release-<versão>-<data>/`: anexe os quatro arquivos de `assets/` ao Release e use `RELEASE-NOTES.md` como descrição. O ZIP inclui extensão, setup e instruções; o EXE separado permite instalar somente o auxiliar. O build não publica o Release nem executa a instalação. Use uma **pré-release experimental** para esta versão.
+
+As [instruções de instalação manual](release/INSTALL.pt-BR.md) acompanham o pacote. O setup requer internet e adquire os executáveis de mídia dos fornecedores; não é o bundle offline antigo, cujo bloqueio por fontes incompletas permanece. A geração dos anexos não certifica a completude de fontes de terceiros nem altera os indicadores de distribuição dos manifests existentes.
+
+## Ferramentas de desenvolvimento
+
+### Ubuntu
+
+A entrega experimental atende **Ubuntu 24.04+ x86_64 com Google Chrome .deb**. O instalador por usuário baixa fornecedores com SHA-256 fixado e registra o Native Messaging no diretório de configuração do Chrome. FFmpeg, Zenity, Python 3 e certificados são pré-requisitos dos repositórios Ubuntu. Consulte [instalação e remoção no Ubuntu](release/INSTALL.ubuntu.pt-BR.md).
+
+Para gerar o TAR do instalador e o ZIP da extensão usando o ambiente de build Windows já preparado:
+
+```powershell
+pwsh -NoProfile -File ./tools/release-linux.ps1
+```
+
+Os anexos ficam em uma pasta nova `dist/release-linux-<versão>-<data>/assets/`. O empacotamento compila o host Linux, inclui licenças Go/x/sys, verifica todos os bytes dos arquivos comprimidos e gera `SHA256SUMS.txt`. Não publica, não instala pacotes globais e não altera a instalação Windows. As dependências Linux têm pins separados em `release/suppliers.linux.lock.json`.
+
+O código seleciona arquivos Go por sistema operacional. O nome histórico `internal/windows` permanece como fronteira de processos/arquivos para evitar alterar todos os imports; os arquivos `*_linux.go` implementam a fronteira Linux. No Linux, cancelamento usa grupos de processos, persistência usa permissões por usuário e flock, e publicação usa linkat sem sobrescrita. Processos que escapem do grupo e encerramento abrupto do host não têm as mesmas garantias de árvore dos Job Objects Windows. Snap/Flatpak e outras arquiteturas ainda não são suportados nesta entrega.
+
+### Windows
 
 Ferramentas de desenvolvimento preparadas ficam em `.tools/`, com versões e hashes registrados. O arquivo de código não inclui essas ferramentas nem `node_modules`; consulte os pins em `release/dependencies.lock.json` e as versões nas evidências antes de preparar outro ambiente. Não é necessário alterar o PATH global. Binários, caches, builds e relatórios de recuperação não entram no Git.
 

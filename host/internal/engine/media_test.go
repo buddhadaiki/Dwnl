@@ -30,7 +30,7 @@ type realRunner struct {
 
 func (r *realRunner) Run(ctx context.Context, s ports.ExecSpec, emit func(ports.ProcessLine)) (ports.ProcessResult, error) {
 	r.specs = append(r.specs, s)
-	cmd := exec.CommandContext(ctx, filepath.Join(r.bin, string(s.Executable)+".exe"), s.Args...)
+	cmd := exec.CommandContext(ctx, filepath.Join(r.bin, ports.ExecutableFile(s.Executable)), s.Args...)
 	cmd.Dir = s.Dir
 	cmd.Env = s.Env
 	var stdout, stderr bytes.Buffer
@@ -70,7 +70,7 @@ func mediaRunner(t *testing.T) *realRunner {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(bin, "ffmpeg.exe")); err != nil {
+	if _, err := os.Stat(filepath.Join(bin, ports.ExecutableFile(ports.FFmpeg))); err != nil {
 		t.Skip("private media tools unavailable: " + err.Error())
 	}
 	return &realRunner{bin: bin}
@@ -81,7 +81,7 @@ func generateFixture(t *testing.T, r *realRunner) LocalMedia {
 	video := filepath.Join(dir, "video.mp4")
 	audio := filepath.Join(dir, "audio.m4a")
 	for _, a := range [][]string{{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-f", "lavfi", "-i", "color=c=black:size=160x90:rate=25,drawbox=color=white:t=fill:enable='between(t,0.5,0.54)'", "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", video}, {"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-f", "lavfi", "-i", "aevalsrc=if(between(t\\,0.5\\,0.54)\\,0.3*sin(2*PI*1000*t)\\,0):s=44100", "-t", "2", "-c:a", "aac", audio}} {
-		out, err := exec.Command(filepath.Join(r.bin, "ffmpeg.exe"), a...).CombinedOutput()
+		out, err := exec.Command(filepath.Join(r.bin, ports.ExecutableFile(ports.FFmpeg)), a...).CombinedOutput()
 		if err != nil {
 			t.Fatalf("fixture generation: %v %s", err, out)
 		}
@@ -90,7 +90,7 @@ func generateFixture(t *testing.T, r *realRunner) LocalMedia {
 }
 func audioOnset(t *testing.T, r *realRunner, path string) float64 {
 	t.Helper()
-	cmd := exec.Command(filepath.Join(r.bin, "ffmpeg.exe"), "-nostdin", "-v", "error", "-i", path, "-map", "0:a:0", "-f", "f32le", "-ac", "1", "-ar", "44100", "pipe:1")
+	cmd := exec.Command(filepath.Join(r.bin, ports.ExecutableFile(ports.FFmpeg)), "-nostdin", "-v", "error", "-i", path, "-map", "0:a:0", "-f", "f32le", "-ac", "1", "-ar", "44100", "pipe:1")
 	data, err := cmd.Output()
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +110,7 @@ func TestAVFixtureSynchronization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := exec.Command(filepath.Join(r.bin, "ffmpeg.exe"), "-nostdin", "-v", "error", "-i", result.Path, "-map", "0:v:0", "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1").Output()
+	data, err := exec.Command(filepath.Join(r.bin, ports.ExecutableFile(ports.FFmpeg)), "-nostdin", "-v", "error", "-i", result.Path, "-map", "0:v:0", "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestFixturesVideoStreamcopy(t *testing.T) {
 		t.Fatal("video was not streamcopied")
 	}
 	t.Logf("physically verified remux: %+v", result)
-	out, err := exec.Command(filepath.Join(r.bin, "ffmpeg.exe"), "-nostdin", "-v", "error", "-i", result.Path, "-f", "null", "-").CombinedOutput()
+	out, err := exec.Command(filepath.Join(r.bin, ports.ExecutableFile(ports.FFmpeg)), "-nostdin", "-v", "error", "-i", result.Path, "-f", "null", "-").CombinedOutput()
 	if err != nil {
 		t.Fatalf("full A/V decode failed: %v %s", err, out)
 	}
@@ -222,7 +222,7 @@ func TestMp3128192320(t *testing.T) {
 			if result.Format != "mp3" || result.AudioCodec != "mp3" || result.VideoCodec != "" || result.MP3BitrateKbps != bitrate {
 				t.Fatalf("result=%+v", result)
 			}
-			out, err := exec.Command(filepath.Join(r.bin, "ffmpeg.exe"), "-nostdin", "-v", "error", "-i", result.Path, "-f", "null", "-").CombinedOutput()
+			out, err := exec.Command(filepath.Join(r.bin, ports.ExecutableFile(ports.FFmpeg)), "-nostdin", "-v", "error", "-i", result.Path, "-f", "null", "-").CombinedOutput()
 			if err != nil {
 				t.Fatalf("MP3 decode: %v %s", err, out)
 			}

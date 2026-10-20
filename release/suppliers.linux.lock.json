@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "platform": "linux-x86_64",
+  "mode": "supplier-acquisition",
+  "suppliers": [
+    {
+      "name": "yt-dlp",
+      "version": "2026.08.19",
+      "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_linux",
+      "archiveType": "executable",
+      "sha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a",
+      "sizeBytes": 40446224,
+      "license": "GPL-3.0-or-later combined official executable",
+      "sourceReference": "https://github.com/yt-dlp/yt-dlp/tree/2026.08.19",
+      "files": [{"entry": "", "path": "bin/yt-dlp", "sha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a", "sizeBytes": 40446224}]
+    },
+    {
+      "name": "deno",
+      "version": "2.9.7",
+      "url": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-unknown-linux-gnu.zip",
+      "archiveType": "zip",
+      "sha256": "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490",
+      "sizeBytes": 41596794,
+      "license": "MIT and upstream third-party component licenses",
+      "sourceReference": "https://github.com/denoland/deno/tree/v2.9.7",
+      "files": [{"entry": "deno", "path": "bin/deno", "sha256": "ce6a052beb97c2b92de67077e3f3924ba7c9661ede0d8dc2f66a116a3c841f21", "sizeBytes": 95830104}]
+    }
+  ],
+  "systemPrerequisites": ["python3", "ca-certificates", "ffmpeg", "zenity"],
+  "checksumSource": "Official GitHub release asset SHA256 digests; Deno executable verified from pinned archive"
+}

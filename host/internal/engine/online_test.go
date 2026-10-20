@@ -181,7 +181,7 @@ func TestOnlineUnknownAudioIsConfirmedFromPhysicalFile(t *testing.T) {
 			media := generateFixture(t, local)
 			if withAudio {
 				merged := filepath.Join(testutil.TempDir(t), "av.mp4")
-				out, err := exec.Command(filepath.Join(local.bin, "ffmpeg.exe"), "-nostdin", "-v", "error", "-i", media.VideoPath, "-i", media.AudioPath, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", merged).CombinedOutput()
+				out, err := exec.Command(filepath.Join(local.bin, ports.ExecutableFile(ports.FFmpeg)), "-nostdin", "-v", "error", "-i", media.VideoPath, "-i", media.AudioPath, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", merged).CombinedOutput()
 				if err != nil {
 					t.Fatalf("fixture merge %v %s", err, out)
 				}

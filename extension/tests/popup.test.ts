@@ -142,14 +142,15 @@ describe('Portuguese popup', () => {
     expect(element('onboarding').hidden).toBe(false);
     expect(element('onboarding-title').textContent).toBe(reason === 'missing-host' ? 'Falta o auxiliar local' : 'Atualize o pacote Dwnl');
     expect(element<HTMLButtonElement>('install').hidden).toBe(true);
-    expect(element('local-installer').textContent).toContain('não está incluído');
+    expect(element('local-installer').textContent).toContain('LEIA-ME');
+    expect(element('local-installer').textContent).toContain('Windows ou Ubuntu');
     expect(element('onboarding').querySelector('a')).toBeNull();
   });
   it('failed private installer transfer leaves manual package instructions visible', async () => {
     const host = new HostFixture(); host.failure = 'missing-host';
     await setup(host, async () => undefined, { available: async () => true, download: async () => { throw new Error('Chrome refuses private resource'); } });
     element<HTMLButtonElement>('install').click(); await tick();
-    expect(element('local-installer').textContent).toContain('Abra manualmente installer/Dwnl-Setup.exe');
+    expect(element('local-installer').textContent).toContain('Abra o instalador do pacote local seguindo o LEIA-ME');
   });
   it('typed restriction errors never render raw diagnostics or signed media URLs', async () => {
     const host = await setup(); await analyze(); element<HTMLButtonElement>('start').click(); await tick();
