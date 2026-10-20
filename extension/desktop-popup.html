@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dwnl — download rápido</title><link rel="stylesheet" href="desktop-popup.css"></head>
+<body><main>
+<header><a class="brand" href="#" id="brand" aria-label="Abrir aplicativo Dwnl"><span class="mark" aria-hidden="true">↓</span>Dwnl<span class="badge">DESKTOP</span></a><button id="open-app" class="quiet">Abrir app ↗</button></header>
+<section class="connection"><span id="status" role="status">Conectando ao app…</span><button id="reconnect" class="quiet" hidden>Reconectar</button></section>
+<form id="analyze-form"><label for="url">O que vamos baixar?</label><div class="url-row"><input id="url" type="url" placeholder="Cole o link do vídeo" required autocomplete="off"><button id="current-tab" type="button" title="Usar link da aba atual">Usar aba</button></div><button id="analyze" class="primary wide" type="submit" disabled>Analisar vídeo</button></form>
+<p id="feedback" role="status" aria-live="polite" hidden></p>
+<section id="selection" hidden aria-label="Opções do download">
+<h1 id="media-title"></h1><label for="item">Vídeo encontrado</label><select id="item"></select>
+<div class="selection-row"><div><label for="mode">Formato</label><select id="mode"><option value="video">Vídeo</option><option value="mp3">Áudio MP3</option></select></div><div><label for="quality">Qualidade</label><select id="quality"></select></div></div>
+<button id="more-formats" class="quiet" hidden>Mais qualidades</button>
+<p id="media-note" class="muted"></p>
+<div class="destination"><span id="destination" title=""></span><button id="choose-destination" class="quiet">Alterar pasta</button></div>
+<button id="enqueue" class="primary wide">Adicionar à fila</button></section>
+<button id="retry-enqueue" class="primary wide" hidden>Confirmar envio pendente</button>
+<section id="queue-section"><div class="section-heading"><h2>Fila do aplicativo</h2><button id="continue" class="quiet" hidden>Continuar fila</button></div><p id="queue" class="muted">Aguardando conexão.</p></section>
+<footer>O app continua baixando quando você fecha o navegador.</footer>
+</main><script type="module" src="src/desktop-popup.js"></script></body></html>

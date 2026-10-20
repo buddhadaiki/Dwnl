@@ -4,7 +4,11 @@
 #endif
 [Setup]
 AppId={{B01F7A32-74CA-4C9E-BDD2-635B305A5480}
+#ifdef DesktopApp
+AppName=Dwnl
+#else
 AppName=Dwnl private prototype
+#endif
 AppVersion={#AppVersion}
 DefaultDirName={localappdata}\Dwnl
 UsePreviousAppDir=no
@@ -27,6 +31,11 @@ WizardStyle=modern
 
 [Files]
 #include PackageRoot + "\payload-files.iss"
+
+#ifdef DesktopApp
+[Icons]
+Name: "{autoprograms}\Dwnl"; Filename: "{app}\Dwnl.exe"; WorkingDir: "{app}"
+#endif
 
 [Code]
 var
@@ -75,9 +84,27 @@ end;
 
 #include PackageRoot + "\supplier-acquisition.iss"
 
+#ifdef DesktopApp
+function HasWebView2(): Boolean;
+var Version: string;
+begin
+  // Microsoft Evergreen detection, checked before downloading any suppliers.
+  Result := RegQueryStringValue(HKLM32, 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and
+    (Version <> '') and (Version <> '0.0.0.0');
+  if not Result then
+    Result := RegQueryStringValue(HKCU, 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and
+      (Version <> '') and (Version <> '0.0.0.0');
+end;
+#endif
 function PrepareToInstall(var NeedsRestart: Boolean): string;
 var Registered: string;
 begin
+#ifdef DesktopApp
+  if not HasWebView2() then begin
+    Result := 'Instale o Microsoft Edge WebView2 Runtime (Evergreen) em https://developer.microsoft.com/microsoft-edge/webview2/ e execute este instalador novamente. Nenhuma alteração foi feita.';
+    Exit;
+  end;
+#endif
   RegQueryStringValue(HKCU, NativeKey, '', Registered);
   Result := InstallationProblem(ExpandConstant('{app}'), ExpandConstant('{localappdata}\Dwnl'),
     RegValueExists(HKCU, NativeKey, ''), Registered);
@@ -134,6 +161,11 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var Registered: string;
 begin
   if (CurUninstallStep <> usUninstall) or not OwnedManifest() then Exit;
+#ifdef DesktopApp
+  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Dwnl', Registered) and
+     (Registered = '"' + ExpandConstant('{app}\Dwnl.exe') + '" --background') then
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Dwnl');
+#endif
   DeleteOwnedPayload();
   RegQueryStringValue(HKCU, NativeKey, '', Registered);
   if DeleteOwnedManifestFor(ExpandConstant('{app}'), Registered) then begin

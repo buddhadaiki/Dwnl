@@ -2,6 +2,16 @@
 
 <img src="docs/branding/dwnl-logo.png" width="96" height="96" alt="Logo Dwnl: seta azul de download sobre uma bandeja">
 
+## Aplicativo Windows 0.2.0
+
+A nova etapa oferece aplicativo Go/Wails com WebView2, fila persistente independente do navegador, bandeja e extensão auxiliar. Interface dark com azul royal. A conexão local responde antes da preparação dos componentes; a ponte usa pipe restrito ao usuário, sem servidor de rede. O modo legado/Ubuntu abaixo continua separado.
+
+- [Instalação e uso desktop](release/INSTALL.desktop.pt-BR.md)
+- [Validação e medições de 19/10](docs/validation/2026-10-19-desktop.md)
+- Pacote local: `pwsh -NoProfile -File ./tools/release-desktop.ps1`
+- Desenvolvimento: `pwsh -NoProfile -File ./tools/build-desktop.ps1`; use `Dwnl.exe --state-dir <pasta absoluta isolada> --bin-dir <bin privado> --destination <pasta absoluta>` para não tocar na instalação pessoal.
+
+O build não instala, registra nem publica. Histórico e preferências legados são preservados; a retomada de downloads interrompidos exige comando explícito e reinicia a transferência nesta versão.
 Protótipo para Windows e Ubuntu: uma extensão Chrome Manifest V3 em TypeScript controla um auxiliar Go por Native Messaging. No Windows, o auxiliar usa cópias privadas de yt-dlp, Deno, FFmpeg e ffprobe; no Ubuntu, yt-dlp/Deno são privados e FFmpeg/ffprobe vêm dos pacotes do sistema. Não há backend, serviço ou telemetria.
 
 O engine online usa os extratores existentes do yt-dlp através de um adaptador privado com HTTPS, DNS/IP fixados, redirects validados e bloqueio de credenciais/fallback externo. Em 14/10, amostras públicas reais produziram vídeo Instagram e vídeo/MP3 X, confirmados por ffprobe, decodificação integral e readback de hash. YouTube e TikTok chegaram às respectivas CDNs e receberam HTTP 403; nenhum arquivo final foi gerado, e as recusas foram respeitadas. Os testes de mídia sintética também confirmam seleção exata, junção e MP3 por FFmpeg/ffprobe reais. Isso não promete suporte universal.

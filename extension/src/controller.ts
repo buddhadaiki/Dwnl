@@ -32,7 +32,7 @@ export class ChromeNativeClient implements NativeClient {
       let reject!: (error: unknown) => void;
       const promise = new Promise<Response>((yes, no) => { resolve = yes; reject = no; });
       const timeoutMs = operation === 'analyze' ? Math.max(this.timeoutMs, ANALYSIS_TIMEOUT_MS) : operation === 'chooseDestination' ? Math.max(this.timeoutMs, 300000) : this.timeoutMs;
-      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new NativeTransportError('timeout')); }, timeoutMs);
+      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new NativeTransportError('timeout')); if (operation === 'handshake') this.failConnection('disconnected'); }, timeoutMs);
       this.pending.set(requestId, { signature, operation, promise, resolve, reject, timer });
       try { this.port.postMessage(request); } catch { this.failConnection('disconnected'); }
       return promise;
@@ -147,7 +147,7 @@ export class ExtensionController {
   }
   private transportFailure(error: unknown): void {
     if (error instanceof NativeTransportError && error.reason !== 'timeout') this.state = { ...this.state, connection: error.reason };
-    if (error instanceof NativeTransportError && error.reason === 'timeout') this.state = { ...this.state, error: { code: 'NETWORK_ERROR', message: 'O auxiliar não respondeu. Verifique a tarefa antes de tentar novamente.', retryable: true } };
+    if (error instanceof NativeTransportError && error.reason === 'timeout') this.state = { ...this.state, ...(this.state.connection === 'connecting' ? { connection: 'disconnected' as const } : {}), error: { code: 'NETWORK_ERROR', message: 'O auxiliar não respondeu. Verifique a tarefa antes de tentar novamente.', retryable: true } };
     else if (error instanceof ProtocolDecodeError) this.state = { ...this.state, error: { code: error.code, message: error.code, retryable: false } };
     this.publish();
   }

@@ -75,7 +75,7 @@ func TestChromeNamedPipeCancellation(t *testing.T) {
 	for _, mode := range []string{"stall-read", "stall-write", "stall-exit"} {
 		t.Run("cmd/"+mode, func(t *testing.T) {
 			started := time.Now()
-			ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			input, output := chromePipe(t, ctx, true), chromePipe(t, ctx, false)
 			process := startChromeFixture(t, ctx, cancel, fixture, "cmd", mode, input, output)
@@ -85,6 +85,11 @@ func TestChromeNamedPipeCancellation(t *testing.T) {
 			if err := output.connect(); err != nil {
 				t.Fatal(err)
 			}
+			// Start the cancellation exercise only after the child has attached.
+			// Cold process/antivirus startup is bounded by the setup context and
+			// total budget below, not mistaken for a stalled I/O cancellation.
+			cancelIO := time.AfterFunc(1500*time.Millisecond, cancel)
+			defer cancelIO.Stop()
 			var ioErr error
 			if mode == "stall-write" {
 				// Exceed the pipe buffer while the fixture never reads its stdin.
@@ -98,15 +103,15 @@ func TestChromeNamedPipeCancellation(t *testing.T) {
 					t.Fatalf("fixture did not reply before retaining pipes: %v", ioErr)
 				}
 			}
-			if mode != "stall-exit" && !errors.Is(ioErr, context.DeadlineExceeded) {
-				t.Errorf("stalled %s I/O did not report its deadline: %v", mode, ioErr)
+			if mode != "stall-exit" && !errors.Is(ioErr, context.Canceled) {
+				t.Errorf("stalled %s I/O did not report explicit cancellation: %v", mode, ioErr)
 			}
 			input.Close()
 			if !process.wait(12 * time.Second) {
 				t.Fatal("owned stalled fixture did not finish before cancellation/drain deadline")
 			}
 			exited, err := process.childExited()
-			if !process.result.Canceled || !errors.Is(process.err, context.DeadlineExceeded) || !exited || err != nil {
+			if !process.result.Canceled || !errors.Is(process.err, context.Canceled) || !exited || err != nil {
 				t.Fatalf("fixture tree exit/drain unconfirmed: result=%+v err=%v physicalExit=%t identityErr=%v stderr=%s", process.result, process.err, exited, err, process.stderr())
 			}
 			if pending := input.pending.Load() + output.pending.Load(); pending != 0 {

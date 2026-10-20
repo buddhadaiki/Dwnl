@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Dwnl</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Navegação principal">
+      <div class="brand"><span class="brand-icon" aria-hidden="true">↓</span><span>Dwnl<span class="brand-period">.</span></span></div>
+      <nav>
+        <button class="nav-button selected" id="nav-queue" aria-current="page"><span aria-hidden="true">↓</span> Downloads <span id="queue-count" class="count">0</span></button>
+        <button class="nav-button" id="nav-history"><span aria-hidden="true">↶</span> Histórico</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <button class="nav-button" id="settings-button"><span aria-hidden="true">⚙</span> Configurações</button>
+        <div id="service-status" class="service-status" role="status"><span class="status-dot"></span><span>Conectando ao app…</span></div>
+        <small id="version-label">Dwnl para Windows</small>
+      </div>
+    </aside>
+
+    <main>
+      <header class="page-header">
+        <div><h1 id="page-title">Seus downloads.</h1><p id="page-subtitle">Cole o link. Escolha o formato. Salve do seu jeito.</p></div>
+        <button id="new-button" class="button secondary" hidden>Novo download</button>
+      </header>
+      <div id="global-error" class="notice error" role="alert" hidden></div>
+      <div id="service-notice" class="notice" role="status" hidden></div>
+
+      <section id="composer" class="composer" aria-labelledby="link-label">
+        <form id="analyze-form">
+          <label id="link-label" for="source-url">Link do vídeo</label>
+          <div class="url-row">
+            <input id="source-url" type="url" required autocomplete="off" spellcheck="false" placeholder="https://…" aria-describedby="source-hint">
+            <button id="analyze-button" class="button primary" type="submit">Analisar link</button>
+          </div>
+          <p id="source-hint" class="hint">YouTube e Shorts, Instagram e Reels, TikTok e X.</p>
+        </form>
+        <p id="analysis-status" class="hint" role="status" hidden></p>
+        <div id="analysis-error" class="notice error" role="alert" hidden></div>
+        <section id="selection" class="selection" aria-label="Escolher download" hidden>
+          <div class="media-heading"><div class="media-symbol" aria-hidden="true">▶</div><div><h2 id="media-title"></h2><p id="media-meta" class="hint"></p></div></div>
+          <div id="item-field" class="field" hidden><label for="item-select">Vídeo encontrado</label><select id="item-select"></select></div>
+          <div class="selection-fields">
+            <div class="field"><label for="mode-select">Formato</label><select id="mode-select"><option value="video">Vídeo</option><option value="mp3">Áudio MP3</option></select></div>
+            <div id="quality-field" class="field"><label for="quality-select">Qualidade</label><select id="quality-select"></select></div>
+            <div id="bitrate-field" class="field" hidden><label for="bitrate-select">Bitrate</label><select id="bitrate-select"><option value="128">128 kbps</option><option value="192" selected>192 kbps</option><option value="320">320 kbps</option></select></div>
+            <button id="enqueue-button" class="button primary" type="button">Adicionar à fila</button>
+          </div>
+          <div class="selection-footer"><span id="format-hint" class="hint"></span><button id="more-formats" class="text-button" hidden>Mostrar mais qualidades</button></div>
+        </section>
+        <div class="destination"><span class="folder-icon" aria-hidden="true">▱</span><div><span class="hint">Salvar em</span><span id="destination-label" class="destination-label">Carregando pasta…</span></div><button id="destination-button" class="text-button">Alterar pasta</button></div>
+      </section>
+
+      <section class="transfers" aria-labelledby="transfers-title">
+        <div class="section-heading"><h2 id="transfers-title">Fila de downloads <span id="task-count" class="hint"></span></h2><span id="queue-hint" class="hint">Um download por vez</span><button id="archive-history" class="text-button" hidden>Arquivar histórico</button></div>
+        <div id="queue-limit-notice" class="notice" role="status" hidden><span id="queue-limit-text"></span> <button id="show-history-limit" class="text-button">Ver histórico</button></div><p id="history-status" class="notice" role="status" hidden></p>
+        <div id="paused-notice" class="notice recovery" hidden><div><strong>Fila preservada.</strong><p>Downloads interrompidos aguardam sua confirmação. Alguns podem precisar recomeçar.</p></div><button id="continue-button" class="button secondary">Continuar fila</button></div>
+        <div id="task-list" class="task-list"></div>
+        <div id="empty-state" class="empty-state"><span class="empty-symbol" aria-hidden="true">↓</span><h3>Sua próxima descoberta começa com um link.</h3><p>Adicione um vídeo acima. Você pode fechar a janela enquanto o download continua na bandeja.</p></div>
+      </section>
+<section id="legacy-section" class="legacy-section" aria-labelledby="legacy-title" hidden><h2 id="legacy-title">Histórico anterior</h2><p class="hint">Registros preservados da versão anterior. Para baixar novamente, adicione o link do vídeo.</p><div id="legacy-list" class="task-list"></div></section>
+      <footer class="page-footer"><span id="footer-status" role="status">Preparando o aplicativo…</span><span>Vídeo ou áudio. Você escolhe.</span></footer>
+    </main>
+  </div>
+
+  <dialog id="settings-dialog" aria-labelledby="settings-title">
+    <form method="dialog"><div class="dialog-heading"><h2 id="settings-title">Configurações</h2><button class="icon-button" aria-label="Fechar configurações">×</button></div></form>
+    <label class="setting-row"><span><strong>Iniciar com o Windows</strong><small>O Dwnl fica disponível na bandeja.</small></span><input id="start-at-login" type="checkbox" role="switch"></label>
+    <p class="hint">Fechar a janela mantém os downloads em execução. Para encerrar, use o botão abaixo ou Sair no menu da bandeja.</p>
+    <p id="settings-error" class="notice error" role="alert" hidden></p>
+    <div class="dependencies"><h3>Componentes de download</h3><ul id="dependency-list"></ul></div>
+    <div class="exit-setting"><p class="hint">Ao sair, os downloads param. A fila fica preservada para continuar depois.</p><button id="exit-button" class="button secondary" type="button">Sair do aplicativo</button></div>
+  </dialog>
+
+  <dialog id="archive-dialog" aria-labelledby="archive-title" aria-describedby="archive-description">
+    <h2 id="archive-title">Arquivar histórico?</h2>
+    <p id="archive-description" class="hint">Retira os registros desta lista. Os arquivos baixados e os recibos ficam preservados.</p>
+    <p class="hint">Apenas downloads concluídos, cancelados ou com falha serão arquivados. A fila em andamento permanece disponível.</p>
+    <p id="archive-error" class="notice error" role="alert" hidden></p>
+    <div class="dialog-actions"><button id="archive-cancel" class="button secondary" type="button" autofocus>Voltar</button><button id="archive-confirm" class="button primary" type="button">Arquivar histórico</button></div>
+  </dialog>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

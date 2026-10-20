@@ -10,8 +10,10 @@ const dist = path.join(root, 'dist');
 const markerName = '.dwnl-extension-build';
 const marker = 'Dwnl owned extension build v1\n';
 const identity = JSON.parse(await readFile(path.join(root, 'contracts/extension-identity.json'), 'utf8'));
-const manifest = JSON.parse(await readFile(path.join(source, 'manifest.json'), 'utf8'));
-const args=process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+const desktop = rawArgs.includes('--desktop');
+const args = rawArgs.filter(arg => arg !== '--desktop');
+const manifest = JSON.parse(await readFile(path.join(source, desktop ? 'manifest.desktop.json' : 'manifest.json'), 'utf8'));
 const options = new Map();
 for (let i = 0; i < args.length; i += 2) {
   if (!['--installer', '--output'].includes(args[i]) || !args[i + 1] || options.has(args[i])) throw new Error('Use --installer <verified bootstrap path> and/or --output <fresh dist directory>.');
@@ -36,7 +38,13 @@ if(options.has('--installer')) {
   const report=JSON.parse((await readFile(path.join(path.dirname(input),'package-report.json'),'utf8')).replace(/^\uFEFF/,''));
   const bytes=await readFile(input);
   const sha256=createHash('sha256').update(bytes).digest('hex');
-  if(report.packageMode!=='supplier-acquisition' || report.installedOrRegistered!==false || !report.compiledInstaller || report.compiledInstaller.executed!==false || report.compiledInstaller.sha256!==sha256 || report.compiledInstaller.sizeBytes!==bytes.length || report.identity.extensionId!==identity.extensionId || report.payloadFiles.filter(p=>p.endsWith('.exe')).join(',')!=='dwnl-host.exe') throw new Error('Bootstrap provenance/hash does not match.');
+  // A desktop setup is valid only for the explicitly selected desktop build.
+  // Keep the legacy allowlist limited to its single native host executable.
+  const expectedExecutables = desktop ? ['Dwnl.exe', 'dwnl-host.exe'] : ['dwnl-host.exe'];
+  const payloadExecutables = Array.isArray(report.payloadFiles) && report.payloadFiles.every(file => typeof file === 'string')
+    ? report.payloadFiles.filter(file => file.toLowerCase().endsWith('.exe')).sort() : [];
+  const matchingMode = desktop ? report.desktop === true : report.desktop === undefined || report.desktop === false;
+  if(report.packageMode!=='supplier-acquisition' || !matchingMode || report.installedOrRegistered!==false || !report.compiledInstaller || report.compiledInstaller.executed!==false || report.compiledInstaller.sha256!==sha256 || report.compiledInstaller.sizeBytes!==bytes.length || report.identity?.extensionId!==identity.extensionId || JSON.stringify(payloadExecutables)!==JSON.stringify(expectedExecutables)) throw new Error('Bootstrap provenance/hash does not match.');
   installer={input,sha256,sizeBytes:bytes.length};
 }
 
@@ -82,7 +90,7 @@ async function buildDirectory(input, relative = '') {
     const from = path.join(input, entry.name);
     if (entry.isSymbolicLink()) throw new Error(`Link de entrada não aceito: ${rel}`);
     if (entry.isDirectory()) { await buildDirectory(from, rel); continue; }
-    if (rel === 'manifest.json') continue;
+    if (rel === 'manifest.json' || rel === 'manifest.desktop.json') continue;
     if (entry.name.endsWith('.d.ts')) continue;
     let destination = path.join(output, rel);
     if (entry.name.endsWith('.ts')) {

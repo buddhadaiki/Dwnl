@@ -1,9 +1,10 @@
 [CmdletBinding()]
-param([string]$ProjectRoot,[string]$OutputRoot,[switch]$StageOnly)
+param([string]$ProjectRoot,[string]$OutputRoot,[switch]$StageOnly,[switch]$Desktop)
 $bootstrapInvocation=$MyInvocation.InvocationName
 $bootstrapProject=$ProjectRoot
 $bootstrapOutput=$OutputRoot
 $bootstrapStageOnly=[bool]$StageOnly
+$bootstrapDesktop=[bool]$Desktop
 . (Join-Path $PSScriptRoot 'package.ps1')
 
 function Assert-DwnlSuppliers {
@@ -69,13 +70,14 @@ function Import-DwnlSupplierArtifact {
 
 function Write-DwnlUTF8 {param([string]$Path,[string]$Text) [IO.File]::WriteAllText($Path,$Text,[Text.UTF8Encoding]::new($false))}
 function New-DwnlBootstrapStage {
-    param([string]$ProjectRoot,[string]$OutputRoot)
+    param([string]$ProjectRoot,[string]$OutputRoot,[switch]$Desktop)
     $root=[IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\','/')
     $lock=Get-Content -Raw -LiteralPath (Join-Path $root 'release/suppliers.lock.json') | ConvertFrom-Json
     Assert-DwnlSuppliers $lock
     $identity=Get-Content -Raw -LiteralPath (Join-Path $root 'contracts/extension-identity.json') | ConvertFrom-Json
     Assert-DwnlIdentity $identity
-    $hostMetadata=Get-Content -Raw -LiteralPath (Join-Path $root 'dist/helper/build.json') | ConvertFrom-Json
+    $hostMetadataPath=if($Desktop){'dist/desktop/dwnl-host.exe.json'}else{'dist/helper/build.json'}
+    $hostMetadata=Get-Content -Raw -LiteralPath (Join-Path $root $hostMetadataPath) | ConvertFrom-Json
     $hostPath=Assert-DwnlBinary $root $hostMetadata
     $out=[IO.Path]::GetFullPath($OutputRoot)
     if(-not $out.StartsWith((Join-Path $root 'dist')+'\',[StringComparison]::OrdinalIgnoreCase)) {throw 'Bootstrap output must be within project dist.'}
@@ -97,6 +99,21 @@ function New-DwnlBootstrapStage {
         if((Get-DwnlSha256 $path) -cne $license[0].sha256) {throw 'Pinned embedded notice hash mismatch.'}
         $relative='licenses/'+$name; Copy-Item -LiteralPath $path -Destination (Join-Path $payload $relative); $files+=$relative
         $expected[$relative]=$license[0].sha256
+    }
+    if($Desktop) {
+        $appMetadata=Get-Content -Raw -LiteralPath (Join-Path $root 'dist/desktop/Dwnl.exe.json') | ConvertFrom-Json
+        $appPath=Assert-DwnlBinary $root $appMetadata
+        Copy-Item -LiteralPath $appPath -Destination (Join-Path $payload 'Dwnl.exe')
+        $files+='Dwnl.exe';$expected['Dwnl.exe']=$appMetadata.sha256
+        $moduleLicenses=Get-Content -Raw -LiteralPath (Join-Path $root 'dist/desktop/module-licenses.json') | ConvertFrom-Json
+        foreach($license in $moduleLicenses){
+            $source=Resolve-DwnlPayloadPath $root $license.path
+            if((Get-DwnlSha256 $source) -cne $license.sha256){throw 'Desktop module license hash mismatch'}
+            $relative='licenses/'+[IO.Path]::GetFileName($source)
+            if($expected.ContainsKey($relative)){throw 'Duplicate module license'}
+            Copy-Item -LiteralPath $source -Destination (Join-Path $payload $relative)
+            $files+=$relative;$expected[$relative]=$license.sha256
+        }
     }
     $hashes=@();foreach($relative in $files){$path=Join-Path $payload $relative;$sha=Get-DwnlSha256 $path;if($sha -cne $expected[$relative]){throw 'Staged bootstrap payload hash mismatch.'};$hashes+=[ordered]@{path=$relative;sha256=$sha;sizeBytes=(Get-Item -LiteralPath $path).Length}}
     if(($hashes | Where-Object path -eq 'dwnl-host.exe').sha256 -cne $hostMetadata.sha256) {throw 'Staged helper hash mismatch.'}
@@ -126,7 +143,7 @@ function New-DwnlBootstrapStage {
     Write-DwnlUTF8 (Join-Path $out 'supplier-acquisition.iss') (($acquire+$verify+$delete) -join "`r`n")
     $owned=@($files+$supplierFiles.path+'native-host.json'+'.dwnl-install-owner' | ForEach-Object {"'"+$_.Replace('/','\')+"'"})
     Write-DwnlUTF8 (Join-Path $out 'owned-paths.iss') ('Files := ['+($owned -join ', ')+'];')
-    $report=[ordered]@{schemaVersion=1;packageMode='supplier-acquisition';redistributionReady=$false;completeCorrespondingSource=$false;identity=$identity;host=$hostMetadata;payloadFiles=$files;payloadHashes=$hashes;supplierFiles=$supplierFiles;compiledInstaller=$null;installedOrRegistered=$false}
+    $report=[ordered]@{schemaVersion=1;desktop=[bool]$Desktop;packageMode='supplier-acquisition';redistributionReady=$false;completeCorrespondingSource=$false;identity=$identity;host=$hostMetadata;payloadFiles=$files;payloadHashes=$hashes;supplierFiles=$supplierFiles;compiledInstaller=$null;installedOrRegistered=$false}
     Write-DwnlUTF8 (Join-Path $out 'package-report.json') ($report | ConvertTo-Json -Depth 40)
     return $report
 }
@@ -136,11 +153,12 @@ if($bootstrapInvocation -ne '.') {
     $ProjectRoot=$bootstrapProject;$OutputRoot=$bootstrapOutput;$StageOnly=$bootstrapStageOnly
     if(-not $ProjectRoot){$ProjectRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))}
     if(-not $OutputRoot){$OutputRoot=Join-Path $ProjectRoot 'dist/bootstrap'}
-    $report=New-DwnlBootstrapStage $ProjectRoot $OutputRoot
+    $report=New-DwnlBootstrapStage $ProjectRoot $OutputRoot -Desktop:$bootstrapDesktop
     if(-not $StageOnly) {
         $metadata=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '.tools/inno/verified-inno.json') | ConvertFrom-Json
         $compiler=Assert-DwnlBinary $ProjectRoot ([pscustomobject]@{name='ISCC';version=$metadata.version;platform=$metadata.platform;path=$metadata.path;sha256=$metadata.sha256;sizeBytes=(Get-Item -LiteralPath (Join-Path $ProjectRoot $metadata.path)).Length})
-        $result=& $compiler '/Qp' "/DPackageRoot=$OutputRoot" "/DExtensionId=$($report.identity.extensionId)" '/DAppVersion=0.1.0' (Join-Path $ProjectRoot 'installer/bootstrap.iss') 2>&1
+        $desktopDefine=if($bootstrapDesktop){@('/DDesktopApp=1','/DAppVersion=0.2.0')}else{@('/DAppVersion=0.1.0')}
+        $result=& $compiler @desktopDefine '/Qp' "/DPackageRoot=$OutputRoot" "/DExtensionId=$($report.identity.extensionId)" (Join-Path $ProjectRoot 'installer/bootstrap.iss') 2>&1
         $compileCode=$LASTEXITCODE;Write-DwnlUTF8 (Join-Path $OutputRoot 'inno-compile.log') ($result -join "`r`n")
         if($compileCode -ne 0){throw "Bootstrap compilation failed ($compileCode); see inno-compile.log."}
         $setup=Join-Path $OutputRoot 'Dwnl-Setup.exe'
