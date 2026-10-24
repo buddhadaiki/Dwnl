@@ -63,11 +63,12 @@ type appConnector struct {
 	start      sync.Mutex
 }
 
+// A connected pipe proves the app is running; slow replies are the request's
+// own timeout, never a reason to launch a second instance.
 func (c *appConnector) ping(ctx context.Context) error {
 	probe, stop := context.WithTimeout(ctx, 350*time.Millisecond)
 	defer stop()
-	_, err := desktopipc.Call(probe, c.state, desktopipc.Request{Version: 2, ID: "bridge-ping", Method: "snapshot", Payload: json.RawMessage(`{}`)})
-	return err
+	return desktopipc.Dial(probe, c.state)
 }
 func (c *appConnector) ready(ctx context.Context) error {
 	if err := c.ping(ctx); err == nil {

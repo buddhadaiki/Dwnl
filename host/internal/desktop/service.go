@@ -23,6 +23,7 @@ import (
 
 const Version = "0.2.0"
 const maxTasks = 200
+const folderWarning = "A pasta salva não pôde ser validada; usando a pasta padrão."
 
 type MediaEngine interface {
 	ports.Engine
@@ -166,7 +167,7 @@ func New(config Config) (*Service, error) {
 	s := &Service{ctx: ctx, cancel: cancel, engine: media, store: store, destinations: destinations, sessionID: sessionID, lease: lease,
 		tasks: []queuedRecord{}, analyses: map[string]contracts.Analysis{}, cursors: map[string]cursor{}, analyzeSlot: make(chan struct{}, 1), wake: make(chan struct{}, 1), readiness: "preparing", dependencies: []contracts.Dependency{}}
 	if preferenceErr != nil {
-		s.warning = "A pasta salva não pôde ser validada; usando a pasta padrão."
+		s.warning = folderWarning
 	}
 	if err = s.load(); err != nil {
 		cancel()
@@ -246,11 +247,24 @@ func (s *Service) snapshotLocked() Snapshot {
 	}
 	return out
 }
+
+// cloneTask deep-copies pointers so snapshots never alias queue state.
 func cloneTask(t Task) Task {
-	b, _ := json.Marshal(t)
-	var out Task
-	_ = json.Unmarshal(b, &out)
-	return out
+	if t.Progress != nil {
+		p := *t.Progress
+		p.CompletedBytes, p.TotalBytes = clonePtr(p.CompletedBytes), clonePtr(p.TotalBytes)
+		p.ProcessedSeconds, p.DurationSeconds, p.Percent = clonePtr(p.ProcessedSeconds), clonePtr(p.DurationSeconds), clonePtr(p.Percent)
+		t.Progress = &p
+	}
+	t.CompletedFile = clonePtr(t.CompletedFile)
+	return t
+}
+func clonePtr[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
 }
 
 // Dispatch owns no task lifecycle: canceling the caller only cancels that
@@ -333,6 +347,11 @@ func (s *Service) Dispatch(ctx context.Context, method string, payload json.RawM
 			if err = s.store.SaveDestinationPreference(chosen.Label); err != nil {
 				return nil, fmt.Errorf("A pasta foi selecionada, mas não foi possível salvar a preferência: %w", err)
 			}
+			s.mu.Lock()
+			if s.warning == folderWarning {
+				s.warning = ""
+			}
+			s.mu.Unlock()
 		}
 		return chosen, nil
 	default:

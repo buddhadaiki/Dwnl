@@ -159,11 +159,16 @@ func (e *Engine) remember(a localAnalysis) contracts.Analysis {
 		}
 	}
 	// The host allows one job and caches analyses briefly. Keep memory bounded.
+	// Evict the oldest, as callers' own bounded lists do, so a fresh analysis
+	// is never the one dropped. Fixed-width UTC RFC3339 sorts lexically.
 	if len(e.analyses) >= 20 {
-		for id := range e.analyses {
-			delete(e.analyses, id)
-			break
+		oldestID := ""
+		for id, old := range e.analyses {
+			if oldestID == "" || old.analysis.ExpiresAt < e.analyses[oldestID].analysis.ExpiresAt {
+				oldestID = id
+			}
 		}
+		delete(e.analyses, oldestID)
 	}
 	e.analyses[a.analysis.AnalysisID] = a
 	return cloneAnalysis(a.analysis)

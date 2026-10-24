@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"dwnl/host/internal/contracts"
@@ -155,6 +156,11 @@ func (s *Service) enqueue(p enqueuePayload) (Task, error) {
 		return Task{}, err
 	}
 	identity, err := s.engine.SelectionIdentity(p.AnalysisID, p.ItemID, p.VideoOptionID)
+	var expired *contracts.ProtocolError
+	if errors.As(err, &expired) && expired.Code == contracts.AnalysisExpired {
+		// The engine also caches worker re-analyses, so it can drop one we still list.
+		return Task{}, errors.New("Analise a página novamente antes de adicionar o download.")
+	}
 	if err != nil {
 		return Task{}, err
 	}
@@ -171,8 +177,10 @@ func (s *Service) enqueue(p enqueuePayload) (Task, error) {
 	task := Task{ID: hostruntime.NewID(), RequestID: p.RequestID, URL: a.SourceURL, Title: item.Title, Mode: p.Mode, BitrateKbps: p.BitrateKbps, State: "queued", CreatedAt: time.Now().UTC().Format(time.RFC3339)}
 	s.tasks = append(s.tasks, queuedRecord{Task: task, Selection: p.StartPayload, Identity: identity, Fingerprint: key, DestinationPath: destination})
 	if err = s.persist(); err != nil {
+		// The rollback leaves memory equal to the last saved queue, so a rejected
+		// addition (size limit, brief sharing violation) must not block it.
 		s.tasks = s.tasks[:len(s.tasks)-1]
-		return Task{}, s.persistFailure(err)
+		return Task{}, fmt.Errorf("Não foi possível salvar a fila: %w", err)
 	}
 	s.signal()
 	return task, nil

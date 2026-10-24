@@ -3,6 +3,7 @@ package desktopipc
 import (
 	"dwnl/host/internal/contracts"
 	"encoding/json"
+	"unicode/utf8"
 )
 
 // Snapshot is a compact status view for the browser. The native app retains
@@ -51,12 +52,29 @@ func compactSnapshot(value any) (any, error) {
 	}
 	snapshot.Error = wireText(snapshot.Error)
 	for i := range snapshot.Tasks {
-		task := &snapshot.Tasks[i]
-		task.URL = ""
-		task.Title = wireText(task.Title)
-		task.Error = wireText(task.Error)
+		snapshot.Tasks[i].compact()
 	}
 	return snapshot, nil
+}
+
+// enqueue and cancel return one task; it crosses the same browser boundary.
+func compactTask(value any) (any, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var task wireTask
+	if err = json.Unmarshal(raw, &task); err != nil {
+		return nil, err
+	}
+	task.compact()
+	return task, nil
+}
+
+func (task *wireTask) compact() {
+	task.URL = ""
+	task.Title = wireText(task.Title)
+	task.Error = wireText(task.Error)
 }
 
 // Bound the encoded JSON string, not just rune count. HTML escapes and emoji
@@ -70,13 +88,15 @@ func wireText(value string) string {
 	const suffix = "…"
 	used := 2 + len(suffix) // JSON quotes and UTF-8 ellipsis
 	end := 0
-	for offset, r := range value {
-		piece, _ := json.Marshal(string(r))
+	for end < len(value) {
+		// Measure the source bytes: an invalid byte is 1 byte but encodes as a 6-byte JSON escape.
+		_, size := utf8.DecodeRuneInString(value[end:])
+		piece, _ := json.Marshal(value[end : end+size])
 		if used+len(piece)-2 > maximum {
 			break
 		}
 		used += len(piece) - 2
-		end = offset + len(string(r))
+		end += size
 	}
 	return value[:end] + suffix
 }

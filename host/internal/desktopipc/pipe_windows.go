@@ -116,6 +116,20 @@ func Listen(stateRoot string, handler Handler) (*Server, error) {
 	return s, nil
 }
 func (s *Server) Close() { s.cancel(); s.listener.Close(); s.wg.Wait() }
+
+// Dial reports whether the app is listening without asking it to do any work,
+// so a busy app is never mistaken for a missing one.
+func Dial(ctx context.Context, stateRoot string) error {
+	address, err := Address(stateRoot)
+	if err != nil {
+		return err
+	}
+	conn, err := winio.DialPipeContext(ctx, address)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
+}
 func Call(ctx context.Context, stateRoot string, req Request) (Response, error) {
 	var response Response
 	data, err := json.Marshal(req)

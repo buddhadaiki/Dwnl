@@ -281,6 +281,23 @@ func TestCloseReopenRequiresContinueAndPreservesOrder(t *testing.T) {
 	command(t, s2, "cancel", `{"id":"`+second.ID+`"}`)
 	waitFor(t, func() bool { return state(t, s2, second.ID) == "canceled" })
 }
+func TestCancelPendingAtExitIsNotRequeued(t *testing.T) {
+	f := newFake()
+	c := fixtureConfig(t, f)
+	s := startService(t, c)
+	first := enqueue(t, s, selection(t, s, "first"))
+	waitStarted(t, f)
+	// Exit wins the race against the canceled process: the task is still canceling.
+	s.mu.Lock()
+	s.tasks[s.taskIndex(first.ID)].Task.State = "canceling"
+	s.mu.Unlock()
+	s.Close()
+	c.Engine = newFake()
+	s2 := startService(t, c)
+	if got := state(t, s2, first.ID); got != "canceled" {
+		t.Fatalf("canceled download restored as %q", got)
+	}
+}
 func TestQueuedAndActiveCancelDoNotAffectOtherTask(t *testing.T) {
 	f := newFake()
 	s := startService(t, fixtureConfig(t, f))

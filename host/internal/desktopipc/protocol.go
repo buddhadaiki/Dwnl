@@ -51,6 +51,9 @@ func Handle(ctx context.Context, h Handler, r Request) Response {
 	if err == nil && (r.Method == "snapshot" || r.Method == "continue" || r.Method == "settings") {
 		result, err = compactSnapshot(result)
 	}
+	if err == nil && (r.Method == "enqueue" || r.Method == "cancel") {
+		result, err = compactTask(result)
+	}
 	response := Response{Version: Version, ID: r.ID, Result: result}
 	if err != nil {
 		response.Result = nil

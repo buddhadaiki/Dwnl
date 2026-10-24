@@ -13,7 +13,8 @@ export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => voi
   const on = (id: string, event: string, action: (event: Event) => void) => { const node = element(id); node.addEventListener(event, action); listeners.push(() => node.removeEventListener(event, action)); };
   const feedback = (text: string, error = false) => { const node = element('feedback'); node.textContent = text; node.hidden = !text; node.dataset.error = String(error); };
   const current = (): MediaItem | undefined => analysis?.items.find(item => item.itemId === itemSelect.value);
-  const ready = () => connected && snapshot?.readiness === 'ready';
+  // 'degraded' still serves requests; the app checks each capability itself.
+  const ready = () => connected && !!snapshot && snapshot.readiness !== 'preparing';
   function controls(): void {
     const disabled = busy || !!pending;
     element<HTMLButtonElement>('analyze').disabled = !ready() || disabled;

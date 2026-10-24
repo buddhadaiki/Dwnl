@@ -12,6 +12,11 @@ import (
 	hostwin "dwnl/host/internal/windows"
 )
 
+const leaseWarning = "Outro processo de download está ativo. Aguarde e use Continuar fila."
+const cleanupWarning = "Download concluído; não foi possível remover todos os arquivos temporários privados."
+
+var errSelectionChanged = errors.New("A fonte ou o formato selecionado mudou. Analise novamente e escolha o formato; nenhuma qualidade alternativa foi baixada.")
+
 func (s *Service) worker() {
 	defer s.wg.Done()
 	for {
@@ -41,14 +46,19 @@ func (s *Service) worker() {
 			lease, busy, err := hostwin.AcquireLease("active-task", false)
 			if err != nil || busy {
 				s.paused = true
-				s.warning = "Outro processo de download está ativo. Aguarde e use Continuar fila."
+				s.warning = leaseWarning
 				if saveErr := s.persist(); saveErr != nil {
 					s.persistFailure(saveErr)
 				}
 				s.mu.Unlock()
 				break
 			}
+			// A started task resolves the previous transient notices.
+			if s.warning == leaseWarning || s.warning == cleanupWarning {
+				s.warning = ""
+			}
 			work, cancel := context.WithCancel(s.ctx)
+			before := s.tasks[index].Task
 			s.activeID = s.tasks[index].Task.ID
 			s.activeCancel = cancel
 			s.tasks[index].Task.State = "analyzing"
@@ -56,6 +66,7 @@ func (s *Service) worker() {
 			s.tasks[index].Task.Error = ""
 			if err = s.persist(); err != nil {
 				s.persistFailure(err)
+				s.tasks[index].Task = before
 				s.activeID = ""
 				s.activeCancel = nil
 				cancel()
@@ -144,7 +155,7 @@ func (s *Service) selectPlan(ctx context.Context, r queuedRecord) (contracts.Ana
 		}
 	}
 	if matches != 1 {
-		return a, contracts.MediaItem{}, nil, errors.New("A fonte ou o formato selecionado mudou. Analise novamente e escolha o formato; nenhuma qualidade alternativa foi baixada.")
+		return a, contracts.MediaItem{}, nil, errSelectionChanged
 	}
 	return a, selected, choice, nil
 }
@@ -217,7 +228,7 @@ func (s *Service) execute(ctx context.Context, r queuedRecord) {
 			s.tasks[index].Task.Progress = &copy
 			s.tasks[index].Task.State = string(progress.Stage)
 		})
-		if err == nil && (!hostwin.IsWithin(r.DestinationPath, result.Path) || storage.VerifyCompleted(result) != nil) {
+		if err == nil && (!hostwin.IsWithin(r.DestinationPath, result.Path) || !publishedMatches(result)) {
 			err = &contracts.ProtocolError{Code: contracts.InvalidOutput, Message: "O arquivo final não pôde ser verificado."}
 		}
 	}
@@ -243,7 +254,7 @@ func (s *Service) execute(ctx context.Context, r queuedRecord) {
 		s.blocked = true
 		s.paused = true
 		s.warning = "Não foi possível confirmar o encerramento do processo. A fila foi pausada."
-	case s.closed:
+	case s.closed && task.State != "canceling":
 		task.State = "interrupted"
 		task.Error = "Download interrompido. Continuar fila reiniciará a tentativa desde o início."
 		s.paused = true
@@ -256,14 +267,12 @@ func (s *Service) execute(ctx context.Context, r queuedRecord) {
 		task.State = "failed"
 		task.Error = safeError(err)
 	}
-	if err != nil && !errors.As(err, &protocol) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-		// Only this host-generated selection error is safe to show literally.
-		if err.Error() == "A fonte ou o formato selecionado mudou. Analise novamente e escolha o formato; nenhuma qualidade alternativa foi baixada." {
-			task.Error = err.Error()
-		}
+	// Only this host-generated selection error is safe to show literally.
+	if errors.Is(err, errSelectionChanged) {
+		task.Error = err.Error()
 	}
 	if cleanupErr != nil && err == nil {
-		s.warning = "Download concluído; não foi possível remover todos os arquivos temporários privados."
+		s.warning = cleanupWarning
 	}
 	snapshot.State = contracts.JobState(task.State)
 	snapshot.CompletedFile = task.CompletedFile
@@ -283,6 +292,13 @@ func (s *Service) execute(ctx context.Context, r queuedRecord) {
 		s.persistFailure(e)
 	}
 	s.mu.Unlock()
+}
+
+// The engine already hashed the published bytes; re-reading a multi-gigabyte
+// file here would only delay completion and shutdown.
+func publishedMatches(file contracts.CompletedFile) bool {
+	info, err := os.Lstat(file.Path)
+	return err == nil && info.Mode().IsRegular() && uint64(info.Size()) == file.SizeBytes && len(file.SHA256) == 64
 }
 
 // Caller holds mu. An active task cannot be archived, so its durable ID remains

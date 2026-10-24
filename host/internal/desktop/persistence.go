@@ -102,7 +102,12 @@ func (s *Service) load() error {
 	// explicit command, even if the previous process died before saving paused.
 	for i := range s.tasks {
 		t := &s.tasks[i].Task
-		if !terminal(t.State) && t.State != "queued" {
+		if t.State == "canceling" {
+			// The user's cancellation outlives the process; never requeue it.
+			t.State = "canceled"
+			t.Progress = nil
+			t.Error = ""
+		} else if !terminal(t.State) && t.State != "queued" {
 			t.State = "interrupted"
 			t.Progress = nil
 			t.Error = "Download interrompido. Continuar fila fará uma nova tentativa desde o início."
@@ -249,10 +254,15 @@ func (s *Service) recover() error {
 				r.Task.State = "canceled"
 				r.Task.Error = ""
 			case contracts.StateFailed:
-				r.Task.State = "failed"
-				if record.Snapshot.Error != nil {
-					r.Task.Error = record.Snapshot.Error.Error()
+				// The journal keeps only a "Task ended with CODE" placeholder; the
+				// queue saved the user-facing message right after that entry.
+				if r.Task.State != "failed" || r.Task.Error == "" {
+					r.Task.Error = "O download falhou antes do reinício do aplicativo."
+					if record.Snapshot.Error != nil {
+						r.Task.Error = string(record.Snapshot.Error.Code) + ": " + r.Task.Error
+					}
 				}
+				r.Task.State = "failed"
 			}
 		}
 	}

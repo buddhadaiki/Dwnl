@@ -78,12 +78,27 @@ func TestCompactSnapshotWith200FullSizeTasks(t *testing.T) {
 	}
 }
 
-func TestCompactProjectionDoesNotChangeEnqueueReceipt(t *testing.T) {
-	full := map[string]any{"title": strings.Repeat("x", 4096), "url": "https://www.youtube.com/shorts/source", "completedFile": map[string]any{"path": "C:/Downloads/one.mp4"}}
-	response := Handle(context.Background(), func(context.Context, string, json.RawMessage) (any, error) { return full, nil }, Request{Method: "enqueue", ID: "enqueue"})
-	before, _ := json.Marshal(full)
-	after, _ := json.Marshal(response.Result)
-	if string(before) != string(after) {
-		t.Fatal("enqueue receipt unexpectedly projected")
+func TestCompactProjectionAppliesToTaskReceipts(t *testing.T) {
+	for _, method := range []string{"enqueue", "cancel"} {
+		full := map[string]any{"title": strings.Repeat("x", 4096), "url": "https://www.youtube.com/shorts/source", "completedFile": map[string]any{"path": "C:/Downloads/one.mp4"}}
+		response := Handle(context.Background(), func(context.Context, string, json.RawMessage) (any, error) { return full, nil }, Request{Method: method, ID: method})
+		data, _ := json.Marshal(response.Result)
+		var row map[string]any
+		if err := json.Unmarshal(data, &row); err != nil {
+			t.Fatal(err)
+		}
+		if row["url"] != "" || row["completedFile"] != nil || len(row["title"].(string)) > 512 {
+			t.Fatalf("%s receipt crossed the browser boundary unprojected: %s", method, data)
+		}
+	}
+}
+
+func TestWireTextBoundsInvalidUTF8(t *testing.T) {
+	for n := 80; n <= 180; n++ {
+		value := strings.Repeat("\xff", n)
+		encoded, _ := json.Marshal(wireText(value))
+		if len(encoded) > 512 {
+			t.Fatalf("%d invalid bytes encoded to %d bytes", n, len(encoded))
+		}
 	}
 }

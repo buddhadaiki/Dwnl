@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"dwnl/host/internal/contracts"
+	"dwnl/host/internal/desktop"
 	"dwnl/host/internal/desktopipc"
 	hostwin "dwnl/host/internal/windows"
 	"encoding/hex"
@@ -76,20 +77,18 @@ func (a *App) dispatch(ctx context.Context, method string, payload json.RawMessa
 		if err != nil {
 			return nil, err
 		}
-		data, err := json.Marshal(result)
-		if err != nil {
-			return nil, err
-		}
-		var out map[string]any
-		if err = json.Unmarshal(data, &out); err != nil {
-			return nil, err
+		snapshot, ok := result.(desktop.Snapshot)
+		if !ok {
+			return nil, errors.New("Resposta inesperada do serviço")
 		}
 		enabled, err := a.startupEnabled()
 		if err != nil {
 			return nil, err
 		}
-		out["startAtLogin"] = enabled
-		return out, nil
+		return struct {
+			desktop.Snapshot
+			StartAtLogin bool `json:"startAtLogin"`
+		}{snapshot, enabled}, nil
 	default:
 		return a.service.Dispatch(ctx, method, payload)
 	}
@@ -170,6 +169,9 @@ func (a *App) openCompleted(ctx context.Context, id string, folder bool) error {
 			return err
 		}
 		if err = verifyCompletedContext(ctx, *task.File, !folder); err != nil {
+			if ctx.Err() != nil {
+				return errors.New("A verificação do arquivo demorou demais. Tente novamente.")
+			}
 			return errors.New("O arquivo mudou ou não está mais disponível")
 		}
 		path := task.File.Path

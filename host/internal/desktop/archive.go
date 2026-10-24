@@ -182,33 +182,55 @@ func (s *Service) writeArchived(record queuedRecord) error {
 }
 func (s *Service) archiveHistory(ctx context.Context) (ArchiveResult, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.readiness == "preparing" {
+		s.mu.Unlock()
 		return ArchiveResult{}, errors.New("Aguarde a recuperação inicial do histórico.")
 	}
+	if s.blocked {
+		s.mu.Unlock()
+		return ArchiveResult{}, errors.New("Resolva o erro de armazenamento e reinicie o aplicativo antes de arquivar o histórico.")
+	}
+	var candidates []queuedRecord
+	for _, record := range s.tasks {
+		if archivable(record.Task.State) && record.Task.ID != s.activeID {
+			candidates = append(candidates, record)
+		}
+	}
+	s.mu.Unlock()
+	// Receipt fsyncs run without s.mu so snapshots and engine progress never
+	// wait on disk. Only records still unchanged afterwards leave the queue.
+	written := map[string]queuedRecord{}
+	for _, record := range candidates {
+		if err := ctx.Err(); err != nil {
+			return ArchiveResult{}, err
+		}
+		if err := s.writeArchived(record); err != nil {
+			return ArchiveResult{}, err
+		}
+		written[record.Task.ID] = record
+	}
+	if len(written) == 0 {
+		return ArchiveResult{}, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return ArchiveResult{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.blocked {
 		return ArchiveResult{}, errors.New("Resolva o erro de armazenamento e reinicie o aplicativo antes de arquivar o histórico.")
 	}
 	kept := make([]queuedRecord, 0, len(s.tasks))
 	archived := 0
 	for _, record := range s.tasks {
-		if err := ctx.Err(); err != nil {
-			return ArchiveResult{}, err
-		}
-		if !archivable(record.Task.State) || record.Task.ID == s.activeID {
-			kept = append(kept, record)
+		if saved, ok := written[record.Task.ID]; ok && recordsEqual(saved, record) {
+			archived++
 			continue
 		}
-		if err := s.writeArchived(record); err != nil {
-			return ArchiveResult{}, err
-		}
-		archived++
+		kept = append(kept, record)
 	}
 	if archived == 0 {
 		return ArchiveResult{}, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return ArchiveResult{}, err
 	}
 	before := s.tasks
 	s.tasks = kept

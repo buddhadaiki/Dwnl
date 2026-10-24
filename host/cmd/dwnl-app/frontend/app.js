@@ -257,7 +257,8 @@ async function action(button, method, payload = {}) {
   if (button.disabled) return;
   button.disabled = true;
   notice('global-error',null);
-  try { await call(method,payload,method === 'chooseDestination' ? 300000 : 15000); await refresh(); }
+  // openFile re-hashes the media first; wait as long as the native call allows.
+  try { await call(method,payload,method === 'chooseDestination' ? 300000 : method === 'openFile' ? 130000 : 15000); await refresh(); }
   catch (error) { notice('global-error',error); }
   finally { button.disabled = false; }
 }
