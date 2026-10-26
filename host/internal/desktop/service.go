@@ -379,6 +379,35 @@ func (s *Service) request(op contracts.Operation, id string, payload json.RawMes
 	}
 	return contracts.DecodeRequest(b)
 }
+
+// Engine and contract messages are English diagnostics, so the window shows
+// only these fixed texts keyed by the stable protocol code.
+var protocolMessages = map[contracts.ErrorCode]string{
+	contracts.InvalidMessage:        "Os dados da operação não passaram na validação.",
+	contracts.MessageTooLarge:       "Os dados da operação excedem o tamanho permitido.",
+	contracts.IncompatibleProtocol:  "Os componentes do Dwnl usam versões incompatíveis. Reinstale o aplicativo.",
+	contracts.UnknownOperation:      "A operação não está disponível nesta versão do Dwnl.",
+	contracts.InvalidSelection:      "A opção escolhida não está mais disponível. Analise o link novamente.",
+	contracts.SessionEnded:          "A sessão anterior terminou. Analise o link novamente.",
+	contracts.AnalysisExpired:       "A análise expirou. Analise o link novamente.",
+	contracts.InvalidCursor:         "Não foi possível carregar os formatos. Analise o link novamente.",
+	contracts.Busy:                  "Já existe uma tarefa ativa. Aguarde antes de iniciar outra.",
+	contracts.RequestConflict:       "A identidade desta solicitação já foi usada com outra seleção.",
+	contracts.UnknownJob:            "A tarefa não foi encontrada.",
+	contracts.DependencyUnavailable: "Um componente de mídia não está disponível. Confira a instalação do Dwnl.",
+	contracts.MP3Unavailable:        "A conversão para MP3 não está disponível nesta instalação.",
+	contracts.NoAudio:               "Este conteúdo não tem áudio disponível.",
+	contracts.AccessRestricted:      "A plataforma bloqueou o acesso a este conteúdo.",
+	contracts.NetworkError:          "A conexão com a plataforma falhou. Tente novamente.",
+	contracts.NetworkPolicyBlocked:  "O acesso à rede foi bloqueado pela proteção do Dwnl.",
+	contracts.DestinationError:      "Não foi possível gravar na pasta escolhida. Escolha outra pasta.",
+	contracts.DiskFull:              "O disco está cheio. Libere espaço ou escolha outra pasta.",
+	contracts.EngineError:           "Um componente de mídia não conseguiu concluir a operação.",
+	contracts.CancelFailed:          "O encerramento da tarefa não foi confirmado.",
+	contracts.InvalidOutput:         "O arquivo não passou na verificação. A tarefa não foi concluída.",
+	contracts.InternalError:         "O Dwnl encontrou um erro interno.",
+}
+
 func safeError(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "O tempo limite foi atingido. Tente novamente."
@@ -388,13 +417,19 @@ func safeError(err error) string {
 	}
 	var p *contracts.ProtocolError
 	if errors.As(err, &p) {
-		return string(p.Code) + ": " + p.Message
+		return protocolMessage(p.Code)
 	}
 	var d *contracts.ProtocolDecodeError
 	if errors.As(err, &d) {
-		return string(d.Code) + ": " + d.Message
+		return protocolMessage(d.Code)
 	}
 	return "Falha local ao executar ou salvar a operação. Verifique a pasta e o espaço disponível."
+}
+func protocolMessage(code contracts.ErrorCode) string {
+	if message, ok := protocolMessages[code]; ok {
+		return message
+	}
+	return protocolMessages[contracts.InternalError]
 }
 func fingerprint(p contracts.StartPayload) string {
 	b, _ := json.Marshal(p)
