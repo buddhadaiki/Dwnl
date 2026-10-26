@@ -4,8 +4,10 @@ import (
 	"context"
 	"dwnl/host/internal/contracts"
 	"dwnl/host/internal/ports"
+	"dwnl/host/internal/testutil"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -62,17 +64,18 @@ func TestParseAvailableFormats(t *testing.T) {
 		t.Fatalf("items=%+v err=%v", items, err)
 	}
 	first := items[0]
-	if !first.HasAudio || len(first.VideoChoices) != 2 {
+	// The format without dimensions is dropped: a sized 1080p option exists.
+	if !first.HasAudio || len(first.VideoChoices) != 1 {
 		t.Fatalf("first=%+v", first)
 	}
 	if first.VideoChoices[0].Container != "mp4" || !first.VideoChoices[0].HasAudio || first.VideoChoices[0].AudioCodec != "mp4a.40.2" || first.VideoChoices[0].Height == nil || *first.VideoChoices[0].Height != 1080 {
 		t.Fatalf("1080 choice=%+v", first.VideoChoices[0])
 	}
-	if first.VideoChoices[1].Height != nil {
-		t.Fatal("invented missing height")
+	if size := first.VideoChoices[0].SizeBytes; size == nil || *size != 1200 || first.VideoChoices[0].SizeEstimated {
+		t.Fatalf("size must add the separate audio track: %+v", first.VideoChoices[0])
 	}
-	if items[1].HasAudio || items[1].VideoChoices[0].HasAudio {
-		t.Fatal("invented silent-item audio")
+	if items[1].HasAudio || items[1].VideoChoices[0].HasAudio || items[1].VideoChoices[0].Container != "mp4" {
+		t.Fatalf("silent item must stay silent and be saved as MP4: %+v", items[1])
 	}
 }
 func TestKnownExecutableAndArgsOnly(t *testing.T) {
@@ -123,4 +126,28 @@ func (nonzeroExitRunner) Run(context.Context, ports.ExecSpec, func(ports.Process
 func TestNonzeroProcessExitIsEngineError(t *testing.T) {
 	e, _ := New(Config{HostSessionID: "session", Runner: nonzeroExitRunner{}})
 	code(t, e.run(context.Background(), ports.ExecSpec{Executable: ports.FFmpeg, Args: []string{"-version"}}, nil), contracts.EngineError)
+}
+
+func TestMP4ConversionArgsAreAllowedOnlyForMP4WithTheirStreams(t *testing.T) {
+	dir := testutil.TempDir(t)
+	media := generateFixture(t, mediaRunner(t))
+	in := func(path string) []string {
+		return []string{"-protocol_whitelist", "file,pipe", "-format_whitelist", localFormats, "-i", path}
+	}
+	spec := func(maps []string, codec []string, output string) ports.ExecSpec {
+		args := append([]string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n"}, in(media.VideoPath)...)
+		args = append(append(append(append(args, in(media.AudioPath)...), maps...), codec...), "-map_metadata", "-1", "-progress", "pipe:1", "-nostats", filepath.Join(dir, output))
+		return ports.ExecSpec{Executable: ports.FFmpeg, Dir: dir, Args: args}
+	}
+	videoOnly, withAudio := []string{"-map", "0:v:0"}, []string{"-map", "0:v:0", "-map", "1:a:0"}
+	for _, ok := range []ports.ExecSpec{spec(withAudio, aacArgs, "processed.mp4"), spec(videoOnly, h264Args, "processed.mp4"), spec(withAudio, h264Args, "processed.mp4")} {
+		if err := ValidateExecSpec(ok); err != nil {
+			t.Errorf("rejected %v: %v", ok.Args, err)
+		}
+	}
+	for _, bad := range []ports.ExecSpec{spec(videoOnly, aacArgs, "processed.mp4"), spec([]string{"-map", "0:v:0", "-map", "0:v:0"}, aacArgs, "processed.mp4"), spec(withAudio, h264Args, "processed.mkv")} {
+		if ValidateExecSpec(bad) == nil {
+			t.Errorf("accepted %v", bad.Args)
+		}
+	}
 }

@@ -538,3 +538,41 @@ func TestFinalizeCancellationCleansOwnedIntermediateOnly(t *testing.T) {
 		t.Fatal("unrelated destination file changed")
 	}
 }
+
+// MP4 is the only video output: Opus audio becomes AAC, VP9 is copied and
+// VP8, which MP4 cannot carry, is re-encoded to H.264.
+func TestIncompatibleStreamsAreConvertedIntoMP4(t *testing.T) {
+	for _, tc := range []struct{ encoder, want string }{{"libvpx-vp9", "vp9"}, {"libvpx", "h264"}} {
+		t.Run(tc.encoder, func(t *testing.T) {
+			r := mediaRunner(t)
+			dir := testutil.TempDir(t)
+			video, audio := filepath.Join(dir, "video.webm"), filepath.Join(dir, "audio.webm")
+			for _, a := range [][]string{
+				{"-nostdin", "-v", "error", "-f", "lavfi", "-i", "color=c=black:size=160x90:rate=25", "-t", "2", "-c:v", tc.encoder, "-an", video},
+				{"-nostdin", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "2", "-c:a", "libopus", audio},
+			} {
+				if out, err := exec.Command(filepath.Join(r.bin, ports.ExecutableFile(ports.FFmpeg)), a...).CombinedOutput(); err != nil {
+					t.Fatalf("fixture generation: %v %s", err, out)
+				}
+			}
+			e, err := New(Config{HostSessionID: "local-session", Runner: r})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := e.Probe(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			a, err := e.ImportLocal(context.Background(), fixtureURL, LocalMedia{VideoPath: video, AudioPath: audio, Title: "Conversion fixture"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := e.Execute(context.Background(), localPlan(t, a, contracts.ModeVideo), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if filepath.Ext(result.Path) != ".mp4" || result.Format != "mp4" || result.VideoCodec != tc.want || result.AudioCodec != "aac" {
+				t.Fatalf("result=%+v", result)
+			}
+		})
+	}
+}

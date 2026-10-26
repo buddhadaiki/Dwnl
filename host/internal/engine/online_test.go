@@ -96,6 +96,39 @@ func TestOnlineSelectionDownloadsExactFormatsThenPhysicallyMuxes(t *testing.T) {
 	}
 }
 
+// TikTok reports whole seconds: a 2 s clip may be listed as 3, but not as 4.
+func TestWholeSecondDurationsAllowTikTokRounding(t *testing.T) {
+	for _, tc := range []struct {
+		reported string
+		ok       bool
+	}{{"3", true}, {"4", false}, {"2.6", false}} {
+		t.Run(tc.reported, func(t *testing.T) {
+			local := mediaRunner(t)
+			raw := []byte(`{"entries":[{"id":"owned","title":"Rounded duration fixture","duration":` + tc.reported + `,"formats":[{"format_id":"v","ext":"mp4","vcodec":"avc1.640028","acodec":"none","width":160,"height":90},{"format_id":"a","ext":"m4a","vcodec":"none","acodec":"mp4a.40.2","abr":128}]}]}`)
+			r := &downloadBoundaryRunner{local: local, metadata: raw, media: generateFixture(t, local)}
+			root := testutil.TempDir(t)
+			e, _ := New(Config{HostSessionID: "online-session", Runner: r, PrivateBinDir: local.bin, AnalysisRoot: filepath.Join(root, "analyses")})
+			e.capabilities = contracts.Capabilities{Video: true, MP3: true, NetworkAccess: true}
+			a, err := e.Analyze(context.Background(), "https://www.tiktok.com/@owned/video/123")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = e.Execute(context.Background(), localPlan(t, a, contracts.ModeVideo), nil)
+			if tc.ok && err != nil {
+				t.Fatal(err)
+			}
+			if !tc.ok {
+				code(t, err, contracts.InvalidOutput)
+			}
+		})
+	}
+	for reported, want := range map[float64]float64{10: 1, 10.5: .5, 300: 3, 30.25: .5} {
+		if got := durationTolerance(reported); got != want {
+			t.Errorf("durationTolerance(%v) = %v, want %v", reported, got, want)
+		}
+	}
+}
+
 type metadataRunner struct {
 	specs []ports.ExecSpec
 	raw   []byte
@@ -276,23 +309,33 @@ func TestAudioSourceUsesKnownTotalBitrateForAudioOnlyVariants(t *testing.T) {
 	}
 }
 func TestVideoChoiceUsesBestSeparateAudioInsteadOfLowerProgressiveAudio(t *testing.T) {
-	raw := []byte(`{"entries":[{"id":"owned","title":"Public fixture","formats":[{"format_id":"combined","vcodec":"h264","acodec":"aac","abr":64},{"format_id":"best-audio","vcodec":"none","acodec":"opus","abr":128}]}]}`)
-	root := testutil.TempDir(t)
-	r := &metadataRunner{raw: raw}
-	e, _ := New(Config{HostSessionID: "session", Runner: r, PrivateBinDir: filepath.Join(root, "bin"), AnalysisRoot: filepath.Join(root, "analyses")})
-	a, err := e.Analyze(context.Background(), "https://x.com/owned/status/123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	choice := a.Items[0].VideoChoices[0]
-	pick := e.analyses[a.AnalysisID].online.Items[a.Items[0].ItemID].Choices[choice.OptionID]
-	if choice.AudioCodec != "opus" || choice.Container != "mkv" || pick.AudioID != "best-audio" {
-		t.Fatalf("lower progressive audio selected: choice=%+v privatePick=%+v", choice, pick)
+	for _, tc := range []struct {
+		name, separate, wantAudio, wantCodec string
+	}{
+		{"better AAC replaces progressive AAC", "aac", "best-audio", "aac"},
+		// Opus would need converting to fit MP4; the clip's own AAC is kept.
+		{"opus does not replace progressive AAC", "opus", "combined", "aac"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := []byte(`{"entries":[{"id":"owned","title":"Public fixture","formats":[{"format_id":"combined","vcodec":"h264","acodec":"aac","abr":64},{"format_id":"best-audio","vcodec":"none","acodec":"` + tc.separate + `","abr":128}]}]}`)
+			root := testutil.TempDir(t)
+			r := &metadataRunner{raw: raw}
+			e, _ := New(Config{HostSessionID: "session", Runner: r, PrivateBinDir: filepath.Join(root, "bin"), AnalysisRoot: filepath.Join(root, "analyses")})
+			a, err := e.Analyze(context.Background(), "https://x.com/owned/status/123")
+			if err != nil {
+				t.Fatal(err)
+			}
+			choice := a.Items[0].VideoChoices[0]
+			pick := e.analyses[a.AnalysisID].online.Items[a.Items[0].ItemID].Choices[choice.OptionID]
+			if choice.AudioCodec != tc.wantCodec || choice.Container != "mp4" || pick.VideoID != "combined" || pick.AudioID != tc.wantAudio {
+				t.Fatalf("choice=%+v privatePick=%+v", choice, pick)
+			}
+		})
 	}
 }
 func TestReplacedProgressiveAudioDoesNotExposeOriginalFormatSize(t *testing.T) {
 	for _, size := range []string{`"filesize":100000`, `"filesize_approx":100000`} {
-		raw := []byte(`{"id":"owned","title":"Public fixture","formats":[{"format_id":"combined","vcodec":"h264","acodec":"aac","abr":64,` + size + `},{"format_id":"best-audio","vcodec":"none","acodec":"opus","abr":128}]}`)
+		raw := []byte(`{"id":"owned","title":"Public fixture","formats":[{"format_id":"combined","vcodec":"h264","acodec":"aac","abr":64,` + size + `},{"format_id":"best-audio","vcodec":"none","acodec":"aac","abr":128}]}`)
 		items, err := ParseMetadata(raw)
 		if err != nil {
 			t.Fatal(err)

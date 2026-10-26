@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -232,22 +233,18 @@ func (e *Engine) fetchOnlineMetadata(ctx context.Context, source, parent string)
 	return readExtractorMetadata(dir)
 }
 
+// audioFormat is the MP3 source: the best audio-only track, else the best
+// audio carried by a video format.
 func audioFormat(formats []extractedFormat) string {
+	if f := bestAudioOnly(formats, anyAudio); f != nil {
+		return f.ID
+	}
 	best := ""
 	rate := -1.0
-	for _, audioOnly := range []bool{true, false} {
-		for _, f := range formats {
-			bitrate := f.ABR
-			if bitrate <= 0 && !hasCodec(f.VCodec) {
-				bitrate = f.TBR
-			}
-			if !f.DRM && hasCodec(f.ACodec) && hasCodec(f.VCodec) != audioOnly && bitrate > rate {
-				best = f.ID
-				rate = bitrate
-			}
-		}
-		if best != "" {
-			break
+	for _, f := range formats {
+		if !f.DRM && hasCodec(f.ACodec) && hasCodec(f.VCodec) && audioRate(f) > rate {
+			best = f.ID
+			rate = audioRate(f)
 		}
 	}
 	return best
@@ -303,19 +300,17 @@ func (e *Engine) analyzeOnline(ctx context.Context, raw string) (contracts.Analy
 		item := &items[i]
 		item.ItemID = newID()
 		remote := remoteItem{ID: record.ID, AudioID: audio, Choices: map[string]remotePick{}, Record: record}
-		index := 0
-		for _, f := range record.Formats {
-			if f.DRM || !hasCodec(f.VCodec) {
-				continue
-			}
+		// ParseMetadata projected the same picks, in the same order.
+		for index, p := range videoPicks(record.Formats) {
 			choice := &item.VideoChoices[index]
-			index++
 			choice.OptionID = newID()
-			selectedAudio := audio
-			if selectedAudio == "" && hasCodec(f.ACodec) {
-				selectedAudio = f.ID
+			audioID := ""
+			if p.audio != nil {
+				audioID = p.audio.ID
+			} else if hasCodec(p.video.ACodec) {
+				audioID = p.video.ID
 			}
-			remote.Choices[choice.OptionID] = remotePick{VideoID: f.ID, AudioID: selectedAudio}
+			remote.Choices[choice.OptionID] = remotePick{VideoID: p.video.ID, AudioID: audioID}
 		}
 		online.Items[item.ItemID] = remote
 	}
@@ -446,7 +441,7 @@ func (e *Engine) downloadOnline(ctx context.Context, stored localAnalysis, choic
 			cleanup()
 			return stored, nil, err
 		}
-		if p.duration() == 0 || p.duration() > 21600 || (remote.Record.Duration > 0 && absDuration(p.duration()-remote.Record.Duration) > max(.5, remote.Record.Duration*.01)) {
+		if p.duration() == 0 || p.duration() > 21600 || (remote.Record.Duration > 0 && absDuration(p.duration()-remote.Record.Duration) > durationTolerance(remote.Record.Duration)) {
 			cleanup()
 			return stored, nil, protocolError(contracts.InvalidOutput, "The downloaded duration failed validation.")
 		}
@@ -484,6 +479,17 @@ func (e *Engine) downloadOnline(ctx context.Context, stored localAnalysis, choic
 		}
 	}
 	return stored, cleanup, nil
+}
+
+// durationTolerance bounds how far a download may differ from the reported
+// duration. TikTok reports whole seconds (10 for a 10.49 s clip), so a whole
+// number only pins the length to within a second.
+func durationTolerance(reported float64) float64 {
+	tolerance := max(.5, reported*.01)
+	if reported == math.Trunc(reported) {
+		tolerance = max(tolerance, 1)
+	}
+	return tolerance
 }
 func absDuration(n float64) float64 {
 	if n < 0 {

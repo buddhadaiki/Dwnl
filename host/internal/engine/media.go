@@ -219,7 +219,7 @@ func (e *Engine) ImportLocal(ctx context.Context, sourceURL string, media LocalM
 		if audio != nil {
 			acodec = audio.CodecName
 		}
-		choice := contracts.VideoChoice{OptionID: newID(), Container: containerFor(video.CodecName, acodec), VideoCodec: video.CodecName, AudioCodec: acodec, HasAudio: audio != nil}
+		choice := contracts.VideoChoice{OptionID: newID(), Container: videoContainer, VideoCodec: video.CodecName, AudioCodec: acodec, HasAudio: audio != nil}
 		if video.Width > 0 && video.Width <= contracts.MaxSafeInteger {
 			width := video.Width
 			choice.Width = &width
@@ -363,19 +363,39 @@ func (e *Engine) Execute(ctx context.Context, plan contracts.DownloadPlan, emit 
 		args = append(args, "-protocol_whitelist", "file,pipe", "-format_whitelist", localFormats, "-i", path)
 	}
 	expectedDuration := stored.probe.duration()
+	expected := choice
 	if choice != nil {
 		input(stored.media.VideoPath)
 		args = append(args, "-map", "0:v:0")
+		audio := stored.probe.stream("audio")
 		if choice.HasAudio {
 			if stored.media.AudioPath != "" { // Input options precede all output mappings.
 				args = args[:len(args)-2]
 				input(stored.media.AudioPath)
 				args = append(args, "-map", "0:v:0", "-map", "1:a:0")
+				audio = stored.audio.stream("audio")
 			} else {
 				args = append(args, "-map", "0:a:0")
 			}
 		}
-		args = append(args, "-c", "copy")
+		// Streams are copied when MP4 can carry them. Other audio becomes AAC;
+		// video MP4 cannot carry (VP8, Theora) is re-encoded to H.264.
+		converted := *choice
+		video := stored.probe.stream("video")
+		switch {
+		case video != nil && videoCodecRank(video.CodecName) == rankNotMP4:
+			args = append(args, h264Args...)
+			converted.VideoCodec = "h264"
+			if choice.HasAudio {
+				converted.AudioCodec = "aac"
+			}
+		case choice.HasAudio && audio != nil && !mp4Audio(audio.CodecName):
+			args = append(args, aacArgs...)
+			converted.AudioCodec = "aac"
+		default:
+			args = append(args, "-c", "copy")
+		}
+		expected = &converted
 	} else {
 		path := stored.media.AudioPath
 		if path == "" {
@@ -423,7 +443,7 @@ func (e *Engine) Execute(ctx context.Context, plan contracts.DownloadPlan, emit 
 		}
 		return empty, err
 	}
-	if err := validateMediaOutput(proof, choice, plan.MP3BitrateKbps, expectedDuration); err != nil {
+	if err := validateMediaOutput(proof, expected, plan.MP3BitrateKbps, expectedDuration); err != nil {
 		return empty, err
 	}
 	if emit != nil {
