@@ -360,7 +360,7 @@ func atomicJSON(path string, value any) error {
 	if err = file.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	return hostwin.ReplaceFile(tmp, path)
 }
 func VerifyCompleted(c contracts.CompletedFile) error {
 	if c.SizeBytes == 0 || len(c.SHA256) != 64 {

@@ -161,7 +161,7 @@ func (s *Service) persist() error {
 	if err = file.Close(); err != nil {
 		return err
 	}
-	return replaceQueue(tmp, path)
+	return hostwin.ReplaceFile(tmp, path)
 }
 
 func terminal(state string) bool {

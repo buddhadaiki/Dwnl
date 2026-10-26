@@ -1,4 +1,4 @@
-package desktop
+package windows
 
 import (
 	"errors"
@@ -6,10 +6,11 @@ import (
 	"time"
 )
 
-// A scanner can briefly deny replacement even in the owned private directory.
-// Retry only Windows sharing/access denials for at most 200ms; persistent
-// denial is returned to the caller before the queue can acknowledge acceptance.
-func replaceQueue(source, target string) error {
+// ReplaceFile atomically replaces target with source. A scanner can briefly
+// deny replacement even in the owned private directory. Retry only Windows
+// sharing/access denials for at most 200ms; persistent denial is returned to
+// the caller before it can acknowledge the write.
+func ReplaceFile(source, target string) error {
 	from, err := win.UTF16PtrFromString(source)
 	if err != nil {
 		return err
