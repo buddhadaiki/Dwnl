@@ -91,6 +91,52 @@ func TestConnectorCanRestartAndConcurrentCallersShareEachLaunch(t *testing.T) {
 	readyTogether(2)
 }
 
+// A busy app answers slowly and may have every connection slot in use. The
+// bridge must still see it running and never launch a second instance.
+func TestConnectorNeverRelaunchesBusyApplication(t *testing.T) {
+	state := t.TempDir()
+	release := make(chan struct{})
+	entered := make(chan struct{}, 8)
+	server, err := desktopipc.Listen(state, func(ctx context.Context, _ string, _ json.RawMessage) (any, error) {
+		entered <- struct{}{}
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+		return map[string]bool{"ready": true}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	var calls sync.WaitGroup
+	defer calls.Wait()
+	defer close(release)
+	for i := range 8 {
+		calls.Add(1)
+		go func() {
+			defer calls.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, _ = desktopipc.Call(ctx, state, desktopipc.Request{Version: 2, ID: fmt.Sprintf("busy-%d", i), Method: "snapshot", Payload: json.RawMessage(`{}`)})
+		}()
+	}
+	for range 8 {
+		select {
+		case <-entered:
+		case <-time.After(5 * time.Second):
+			t.Fatal("busy requests never reached the app")
+		}
+	}
+	var launches atomic.Int32
+	connector := appConnector{state: state, app: "fixture.exe", launch: func(string) error { launches.Add(1); return errors.New("unexpected launch") }}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err = connector.ready(ctx); err != nil || launches.Load() != 0 {
+		t.Fatalf("busy app: err=%v launches=%d", err, launches.Load())
+	}
+}
+
 func TestConnectorFailedLaunchCanRetryWithoutStickyError(t *testing.T) {
 	state := t.TempDir()
 	var attempts int
