@@ -1,6 +1,7 @@
 import { browserAPI, type BrowserAPI } from './browser.js';
-import { DESKTOP_PORT, DesktopClient, DesktopError, bestDesktopVideo, desktopRequest, videoResolution, type DesktopSnapshot, type EnqueuePayload } from './desktop-client.js';
+import { DESKTOP_PORT, DesktopClient, DesktopError, bestDesktopVideo, desktopRequest, type DesktopSnapshot, type EnqueuePayload } from './desktop-client.js';
 import type { Analysis, MediaItem, MP3Bitrate, VideoChoice } from './protocol.js';
+import { qualityName } from './quality.js';
 
 const PENDING_KEY = 'dwnl-pending-enqueue-v2';
 export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => void {
@@ -60,7 +61,7 @@ export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => voi
     }
     element('more-formats').hidden = !item.formatsCursor || mode.value === 'mp3';
     const choice = item.videoChoices.find(c => c.optionId === quality.value);
-    element('media-note').textContent = mode.value === 'video' && choice && !choice.hasAudio ? choice.audioUnknown ? 'O áudio será verificado durante o download.' : 'Este formato não contém áudio.' : item.audioUnknown ? 'Disponibilidade do áudio ainda não confirmada.' : '';
+    element('media-note').textContent = mode.value === 'video' && choice && !choice.hasAudio ? choice.audioUnknown ? 'O som será confirmado durante o download.' : 'Este vídeo não tem som.' : item.audioUnknown ? 'O som ainda não foi confirmado.' : '';
     controls();
   }
   const fail = (error: unknown) => {
@@ -148,8 +149,7 @@ export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => voi
   return () => { stopped = true; if (timer) clearTimeout(timer); client.disconnect(); for (const remove of listeners) remove(); };
 }
 export function describeVideo(choice: VideoChoice): string {
-  const quality = videoResolution(choice);
-  return (quality ? quality + 'p' : 'Resolução desconhecida') + ' · ' + choice.container.toUpperCase() + ' · ' + choice.videoCodec + (!choice.hasAudio && !choice.audioUnknown ? ' · sem áudio' : '');
+  return qualityName(choice) + (!choice.hasAudio && !choice.audioUnknown ? ' · sem som' : '');
 }
 const browser = browserAPI();
 if (browser && typeof document !== 'undefined') {

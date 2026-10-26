@@ -174,9 +174,11 @@ func (a *App) openCompleted(ctx context.Context, id string, folder bool) error {
 			}
 			return errors.New("O arquivo mudou ou não está mais disponível")
 		}
-		path := task.File.Path
+		path, params := task.File.Path, (*uint16)(nil)
 		if folder {
-			path = filepath.Dir(path)
+			// Explorer, from the system folder, opens with the file selected.
+			params, _ = win.UTF16PtrFromString(`/select,"` + path + `"`)
+			path = filepath.Join(os.Getenv("SYSTEMROOT"), "explorer.exe")
 		} else {
 			switch strings.ToLower(filepath.Ext(path)) {
 			case ".mp4", ".webm", ".mkv", ".mp3", ".m4a", ".ogg", ".opus":
@@ -189,7 +191,7 @@ func (a *App) openCompleted(ctx context.Context, id string, folder bool) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return win.ShellExecute(0, operation, target, nil, nil, win.SW_SHOWNORMAL)
+		return win.ShellExecute(0, operation, target, params, nil, win.SW_SHOWNORMAL)
 	}
 	return errors.New("Download não encontrado")
 }

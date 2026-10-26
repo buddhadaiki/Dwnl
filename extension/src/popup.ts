@@ -3,6 +3,7 @@ import { createInitialState, isTerminal, markStartPending, reduceState, selectIt
 import { NativeTransportError, requestId } from './controller.js';
 import { browserAPI } from './browser.js';
 import { PopupNativeClient } from './popup-client.js';
+import { qualityName } from './quality.js';
 
 export interface PopupClient extends NativeClient {
   snapshot?(): Promise<AppState>; subscribeState?(listener: (state: AppState) => void): () => void;
@@ -20,8 +21,7 @@ export function formatBytes(bytes?: number, estimated = false): string {
   return `${estimated ? '≈ ' : ''}${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: index > 0 ? 1 : 0 }).format(value)} ${units[index]}${estimated ? ' estimados' : ''}`;
 }
 function choiceLabel(choice: VideoChoice): string {
-  const resolution = choice.height ? `${choice.height}p${choice.width ? ` (${choice.width} × ${choice.height})` : ''}` : 'Resolução desconhecida';
-  return `${resolution} · ${choice.container.toUpperCase()} · ${formatBytes(choice.sizeBytes, choice.sizeEstimated)}`;
+  return choice.sizeBytes === undefined ? qualityName(choice) : `${qualityName(choice)} · ${formatBytes(choice.sizeBytes, choice.sizeEstimated)}`;
 }
 function formatDuration(seconds?: number): string {
   return seconds === undefined ? 'Duração desconhecida' : `${Math.floor(seconds / 60)} min ${Math.floor(seconds % 60).toString().padStart(2, '0')} s`;
@@ -85,7 +85,7 @@ export function mountPopup(document: Document, options: PopupOptions): { ready: 
       fillOptions('quality', [{ value: '', label: 'Selecione uma qualidade' }, ...item.videoChoices.map(choice => ({ value: choice.optionId, label: choiceLabel(choice) }))], state.videoOptionId);
       const choice = item.videoChoices.find(value => value.optionId === state.videoOptionId);
       const expired = new Date(state.analysis!.expiresAt).getTime() <= Date.now();
-      text('quality-note', expired ? errorLabels.ANALYSIS_EXPIRED : choice ? `${choice.container === 'webm' ? 'WebM' : choice.container.toUpperCase()} · ${choice.videoCodec === 'unknown' ? 'codec a confirmar' : choice.videoCodec}${choice.audioCodec ? ` / ${choice.audioCodec}` : ''}. ${choice.hasAudio ? 'Sem redução silenciosa de resolução.' : choice.audioUnknown ? 'Áudio confirmado no arquivo baixado.' : 'A saída não contém áudio.'}` : item.videoChoices.length ? 'Não há qualidade conhecida até 1080p nesta lista: escolha uma opção para continuar.' : 'Nenhum formato de vídeo disponível.');
+      text('quality-note', expired ? errorLabels.ANALYSIS_EXPIRED : choice ? (choice.hasAudio ? 'Arquivo MP4 com vídeo e som.' : choice.audioUnknown ? 'Arquivo MP4. O som é confirmado durante o download.' : 'Arquivo MP4 sem som.') : item.videoChoices.length ? 'Não há qualidade conhecida até 1080p nesta lista: escolha uma opção para continuar.' : 'Nenhum formato de vídeo disponível.');
       if (item.omittedMetadata || state.analysis!.omittedMetadata) text('quality-note', `${el('quality-note').textContent} Alguns metadados não foram fornecidos.`);
       el<HTMLSelectElement>('bitrate').value = String(state.bitrateKbps);
       hide('more-formats', !item.formatsCursor); disable('more-formats', !!pending);

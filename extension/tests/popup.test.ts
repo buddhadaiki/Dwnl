@@ -69,14 +69,15 @@ describe('Portuguese popup', () => {
     expect(element<HTMLButtonElement>('mode-mp3').disabled).toBe(true);
     expect(element('mp3-reason').textContent).toContain('não tem áudio');
   });
-  it('requires an explicit higher-than-1080 or unknown quality choice and names available container', async () => {
+  it('requires an explicit higher-than-1080 or unknown quality choice and names the MP4 output', async () => {
     const host = new HostFixture(); host.media = analysis([{ ...choices[0], height: 2160, width: 3840 }]); await setup(host); await analyze();
     expect(element<HTMLSelectElement>('quality').value).toBe('');
     expect(element<HTMLButtonElement>('start').disabled).toBe(true);
     expect(element('quality-note').textContent).toContain('escolha');
     element<HTMLSelectElement>('quality').value = 'webm1080'; element('quality').dispatchEvent(new Event('change'));
     expect(element<HTMLButtonElement>('start').disabled).toBe(false);
-    expect(element('quality-note').textContent).toContain('WebM');
+    expect(element('quality-note').textContent).toContain('MP4');
+    expect(element('quality-note').textContent).not.toMatch(/vp9|h264|webm/i);
   });
   it('renders indeterminate progress and canceling until confirmed terminal event', async () => {
     const host = await setup(); await analyze(); element<HTMLButtonElement>('start').click(); await tick();

@@ -19,6 +19,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	winoptions "github.com/wailsapp/wails/v2/pkg/options/windows"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"golang.org/x/sys/windows/registry"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -119,7 +120,13 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	return wails.Run(&options.App{Title: "Dwnl", Width: 1120, Height: 780, MinWidth: 760, MinHeight: 560, StartHidden: *background, HideWindowOnClose: true, BackgroundColour: options.NewRGB(12, 18, 32), AssetServer: &assetserver.Options{Assets: frontend}, Bind: []interface{}{app},
+	// Paint the theme's page colour before the frontend loads, so opening the
+	// window never flashes the other theme.
+	backgroundColour := options.NewRGB(28, 28, 28)
+	if appsUseLightTheme() {
+		backgroundColour = options.NewRGB(243, 243, 243)
+	}
+	return wails.Run(&options.App{Title: "Dwnl", Width: 1120, Height: 780, MinWidth: 760, MinHeight: 560, StartHidden: *background, HideWindowOnClose: true, BackgroundColour: backgroundColour, AssetServer: &assetserver.Options{Assets: frontend}, Bind: []interface{}{app},
 		OnStartup: func(ctx context.Context) { app.ctx = ctx; close(app.ready); go app.tray() },
 		OnDomReady: func(context.Context) {
 			// Isolated development runs expose cold-start timing without telemetry.
@@ -135,7 +142,7 @@ func run() error {
 			return true
 		},
 		OnShutdown: func(context.Context) { app.quitOnce.Do(func() { close(app.stop); systray.Quit() }) },
-		Windows:    &winoptions.Options{Theme: winoptions.Dark, BackdropType: winoptions.None, WebviewUserDataPath: filepath.Join(*state, "webview"), WindowClassName: "DwnlDesktopWindow", DLLSearchPaths: winoptions.DLLSearchSystem32 | winoptions.DLLSearchApplicationDir}})
+		Windows:    &winoptions.Options{Theme: winoptions.SystemDefault, BackdropType: winoptions.None, WebviewUserDataPath: filepath.Join(*state, "webview"), WindowClassName: "DwnlDesktopWindow", DLLSearchPaths: winoptions.DLLSearchSystem32 | winoptions.DLLSearchApplicationDir}})
 }
 func (a *App) Call(method string, payload string) (any, error) {
 	if len(payload) > 524288 {
@@ -207,4 +214,17 @@ func pngICO(png []byte) []byte {
 	binary.LittleEndian.PutUint32(result[18:22], 22)
 	copy(result[22:], png)
 	return result
+}
+
+const personalizeKey = `Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`
+
+// appsUseLightTheme reads the Windows "app mode" setting; dark is the fallback.
+func appsUseLightTheme() bool {
+	key, err := registry.OpenKey(registry.CURRENT_USER, personalizeKey, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer key.Close()
+	value, _, err := key.GetIntegerValue("AppsUseLightTheme")
+	return err == nil && value != 0
 }

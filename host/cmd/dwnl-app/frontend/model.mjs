@@ -1,10 +1,17 @@
 export const terminalStates = new Set(['completed', 'canceled', 'failed']);
 export const activeStates = new Set(['analyzing', 'downloading', 'muxing', 'converting', 'saving', 'canceling']);
-export const stateLabels = {queued:'Na fila',analyzing:'Analisando',downloading:'Baixando',muxing:'Unindo vídeo e áudio',converting:'Convertendo áudio',saving:'Salvando',completed:'Concluído',canceling:'Cancelando',canceled:'Cancelado',failed:'Falhou',interrupted:'Interrompido'};
+export const stateLabels = {queued:'Na fila',analyzing:'Preparando',downloading:'Baixando',muxing:'Finalizando',converting:'Convertendo para MP3',saving:'Salvando',completed:'Concluído',canceling:'Cancelando',canceled:'Cancelado',failed:'Falhou',interrupted:'Interrompido'};
+// The Downloads view keeps the latest finished items in reach of "Mostrar na pasta".
+export const recentLimit = 5;
 
+// The resolution people name, as the engine's namedSize computes it: 1080 for
+// 1920×1080, a 1080×1920 Short or a 1920×800 crop; 720 and up snap to the
+// standard names.
 export function qualityPixels(choice) {
-  const dimensions = [choice.width, choice.height].filter(n => Number.isFinite(n) && n > 0);
-  return dimensions.length ? Math.min(...dimensions) : 0;
+  const sides = [choice.width, choice.height].filter(n => Number.isFinite(n) && n > 0);
+  if (!sides.length) return 0;
+  const size = sides.length === 2 ? Math.max(Math.min(...sides), Math.max(...sides) * 9 / 16) : sides[0];
+  return [2160, 1440, 1080, 720].find(standard => size >= standard) ?? Math.round(size);
 }
 
 export function defaultChoice(choices = []) {
@@ -25,12 +32,24 @@ export function bytes(value) {
   return new Intl.NumberFormat('pt-BR', {maximumFractionDigits: amount < 10 ? 1 : 0}).format(amount) + ' ' + units[unit];
 }
 
+// Names people know from TVs and phones; codecs and containers stay internal.
+export function qualityName(choice) {
+  const pixels = qualityPixels(choice);
+  return {0:'Qualidade padrão', 2160:'4K', 1080:'1080p Full HD', 720:'720p HD'}[pixels] ?? pixels + 'p';
+}
+
+export function clock(duration) {
+  if (!Number.isFinite(duration) || duration < 0) return '';
+  const seconds = Math.floor(duration);
+  const rest = String(Math.floor(seconds % 3600 / 60)) + ':' + String(seconds % 60).padStart(2, '0');
+  return seconds >= 3600 ? Math.floor(seconds / 3600) + ':' + rest.padStart(5, '0') : rest;
+}
+
 export function choiceLabel(choice) {
-  const dimension = qualityPixels(choice);
-  const parts = [dimension ? dimension + 'p' : 'Resolução não informada', choice.container?.toUpperCase()];
-  if (!choice.hasAudio) parts.push(choice.audioUnknown ? 'áudio a verificar' : 'sem áudio');
+  const parts = [qualityName(choice)];
   if (choice.sizeBytes) parts.push((choice.sizeEstimated ? '≈ ' : '') + bytes(choice.sizeBytes));
-  return parts.filter(Boolean).join(' · ');
+  if (!choice.hasAudio && !choice.audioUnknown) parts.push('sem som');
+  return parts.join(' · ');
 }
 
 export function progressPercent(progress) {
@@ -51,6 +70,11 @@ export function partitionTasks(tasks = []) {
   return {queue: tasks.filter(t => !terminalStates.has(t.state)), history: tasks.filter(t => terminalStates.has(t.state)).slice().reverse()};
 }
 
+// Tasks seen running before that are now completed: the moments worth a toast.
+export function newlyCompleted(previous, tasks = []) {
+  return tasks.filter(t => t.state === 'completed' && previous.has(t.id) && !terminalStates.has(previous.get(t.id)));
+}
+
 export function appendChoices(existing, incoming) {
   const ids = new Set(existing.map(c => c.optionId));
   return [...existing, ...incoming.filter(c => !ids.has(c.optionId) && ids.add(c.optionId))];
@@ -63,5 +87,5 @@ export function isVideoURL(value) {
 
 export function pollDelay(snapshot, failures = 0) {
   if (failures) return Math.min(30000, 2000 * 2 ** Math.min(failures, 4));
-  return snapshot?.readiness === 'preparing' || snapshot?.tasks?.some(t => activeStates.has(t.state)) ? 2000 : 8000;
+  return snapshot?.readiness === 'preparing' || snapshot?.tasks?.some(t => activeStates.has(t.state)) ? 1000 : 8000;
 }
