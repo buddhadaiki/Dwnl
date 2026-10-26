@@ -20,6 +20,7 @@ import (
 
 	"dwnl/host/internal/contracts"
 	"dwnl/host/internal/ports"
+	"dwnl/host/internal/testutil"
 	win "golang.org/x/sys/windows"
 )
 
@@ -33,18 +34,27 @@ var fixtureBuildOnce sync.Once
 var fixtureBuiltPath string
 var fixtureBuildErr error
 
-func buildProcessFixture() {
+func fixtureRepo() string {
 	_, source, _, _ := runtime.Caller(0)
-	repo := filepath.Clean(filepath.Join(filepath.Dir(source), "..", "..", ".."))
+	return filepath.Clean(filepath.Join(filepath.Dir(source), "..", "..", ".."))
+}
+
+func buildProcessFixture() {
+	repo := fixtureRepo()
 	fixtureBuiltPath = filepath.Join(repo, ".tools", "integration", "processfixture.exe")
-	if err := os.MkdirAll(filepath.Dir(fixtureBuiltPath), 0700); err != nil {
-		fixtureBuildErr = err
-		return
+	fixtureBuildErr = buildProcessFixtureAt(repo, fixtureBuiltPath, filepath.Join(repo, ".tools", "tmp-process"))
+}
+
+func buildProcessFixtureAt(repo, output, workDir string) error {
+	for _, dir := range []string{filepath.Dir(output), workDir} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return err
+		}
 	}
-	cmd := exec.Command(filepath.Join(repo, ".tools", "go", "bin", "go.exe"), "-C", filepath.Join(repo, "host"), "build", "-o", fixtureBuiltPath, "./internal/windows/testdata/processfixture")
+	cmd := exec.Command(filepath.Join(repo, ".tools", "go", "bin", "go.exe"), "-C", filepath.Join(repo, "host"), "build", "-o", output, "./internal/windows/testdata/processfixture")
 	settings := map[string]string{
 		"GOTOOLCHAIN": "local", "GOCACHE": filepath.Join(repo, ".tools", "gocache"),
-		"GOMODCACHE": filepath.Join(repo, ".tools", "gomodcache"), "GOTMPDIR": filepath.Join(repo, ".tools", "tmp-process"),
+		"GOMODCACHE": filepath.Join(repo, ".tools", "gomodcache"), "GOTMPDIR": workDir,
 	}
 	for _, value := range os.Environ() {
 		key, _, _ := strings.Cut(value, "=")
@@ -55,8 +65,18 @@ func buildProcessFixture() {
 	for key, value := range settings {
 		cmd.Env = append(cmd.Env, key+"="+value)
 	}
-	if output, err := cmd.CombinedOutput(); err != nil {
-		fixtureBuildErr = fmt.Errorf("build process fixture: %w: %s", err, output)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("build process fixture: %w: %s", err, out)
+	}
+	return nil
+}
+
+// A fresh checkout has no .tools/tmp-process. The fixture build must create its
+// own Go work directory instead of failing every process test in this package.
+func TestProcessFixtureBuildCreatesMissingWorkDirectory(t *testing.T) {
+	base := testutil.TempDir(t)
+	if err := buildProcessFixtureAt(fixtureRepo(), filepath.Join(base, "processfixture.exe"), filepath.Join(base, "absent", "tmp-process")); err != nil {
+		t.Fatal(err)
 	}
 }
 
