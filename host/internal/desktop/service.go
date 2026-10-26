@@ -21,7 +21,7 @@ import (
 	hostwin "dwnl/host/internal/windows"
 )
 
-const Version = "0.2.0"
+const Version = "0.2.1"
 const maxTasks = 200
 const folderWarning = "A pasta salva não pôde ser validada; usando a pasta padrão."
 

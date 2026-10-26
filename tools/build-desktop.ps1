@@ -17,7 +17,7 @@ if($LASTEXITCODE){throw 'Build da ponte falhou'}
 $compilerVersion=& $compiler version
 foreach($name in @('Dwnl.exe','dwnl-host.exe')){
  $file=Get-Item -LiteralPath (Join-Path $out $name)
- $metadata=[ordered]@{schemaVersion=1;name=[IO.Path]::GetFileNameWithoutExtension($name);version='0.2.0';platform='windows-x86_64';path=[IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/');sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant();sizeBytes=$file.Length;compiler=$compilerVersion;cgoEnabled=$false;registered=$false}
+ $metadata=[ordered]@{schemaVersion=1;name=[IO.Path]::GetFileNameWithoutExtension($name);version='0.2.1';platform='windows-x86_64';path=[IO.Path]::GetRelativePath($root,$file.FullName).Replace('\','/');sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant();sizeBytes=$file.Length;compiler=$compilerVersion;cgoEnabled=$false;registered=$false}
  $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out ($name+'.json')) -Encoding utf8
 }
 $licenseDir=Join-Path $out 'licenses';New-Item -ItemType Directory -Force -Path $licenseDir | Out-Null

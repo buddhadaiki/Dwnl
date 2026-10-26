@@ -157,7 +157,7 @@ if($bootstrapInvocation -ne '.') {
     if(-not $StageOnly) {
         $metadata=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '.tools/inno/verified-inno.json') | ConvertFrom-Json
         $compiler=Assert-DwnlBinary $ProjectRoot ([pscustomobject]@{name='ISCC';version=$metadata.version;platform=$metadata.platform;path=$metadata.path;sha256=$metadata.sha256;sizeBytes=(Get-Item -LiteralPath (Join-Path $ProjectRoot $metadata.path)).Length})
-        $desktopDefine=if($bootstrapDesktop){@('/DDesktopApp=1','/DAppVersion=0.2.0')}else{@('/DAppVersion=0.1.0')}
+        $desktopDefine=if($bootstrapDesktop){@('/DDesktopApp=1','/DAppVersion=0.2.1')}else{@('/DAppVersion=0.1.0')}
         $result=& $compiler @desktopDefine '/Qp' "/DPackageRoot=$OutputRoot" "/DExtensionId=$($report.identity.extensionId)" (Join-Path $ProjectRoot 'installer/bootstrap.iss') 2>&1
         $compileCode=$LASTEXITCODE;Write-DwnlUTF8 (Join-Path $OutputRoot 'inno-compile.log') ($result -join "`r`n")
         if($compileCode -ne 0){throw "Bootstrap compilation failed ($compileCode); see inno-compile.log."}

@@ -1,4 +1,4 @@
-# Dwnl 0.2.0 — aplicativo Windows e extensão auxiliar
+# Dwnl 0.2.1 — aplicativo Windows e extensão auxiliar
 
 ## Instalar
 
@@ -6,7 +6,7 @@
 2. Execute `Dwnl-Setup.exe`. O instalador é por usuário, não exige administrador e baixa as versões verificadas de yt-dlp, Deno e FFmpeg. Precisa de internet.
 3. Abra **Dwnl** pelo menu Iniciar. Cole um link e escolha o formato; o aplicativo funciona sem extensão.
 4. Para ações no navegador, abra `chrome://extensions`, ative **Modo do desenvolvedor**, clique **Carregar sem compactação** e escolha a pasta `extension` deste pacote.
-5. Se a extensão anterior já estava carregada, atualize-a para esta pasta/versão e recarregue. Use o app e a extensão 0.2.0 juntos: a ponte antiga usa outro protocolo.
+5. Se a extensão anterior já estava carregada, atualize-a para esta pasta/versão e recarregue. Use o app e a extensão 0.2.1 juntos: a ponte antiga usa outro protocolo.
 
 É necessário Microsoft Edge WebView2 Runtime (Evergreen). O setup detecta ausência antes de baixar os componentes e informa o endereço oficial de instalação: https://developer.microsoft.com/microsoft-edge/webview2/ . O runtime é compartilhado com outros aplicativos; nenhum Chromium completo é incluído no pacote.
 

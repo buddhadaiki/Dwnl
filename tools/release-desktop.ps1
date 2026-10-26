@@ -14,7 +14,7 @@ $stage=Join-Path $out 'bootstrap'
 & (Join-Path $PSScriptRoot 'bootstrap.ps1') -ProjectRoot $root -OutputRoot $stage -Desktop *> (Join-Path $out 'bootstrap.log')
 $report=Get-Content -Raw -LiteralPath (Join-Path $stage 'package-report.json')|ConvertFrom-Json
 if(-not $report.desktop -or -not $report.compiledInstaller -or $report.installedOrRegistered){throw 'Bootstrap incompleto'}
-$bundle=Join-Path $out 'Dwnl-0.2.0-windows-x64'
+$bundle=Join-Path $out 'Dwnl-0.2.1-windows-x64'
 New-Item -ItemType Directory -Path $bundle | Out-Null
 & node (Join-Path $PSScriptRoot 'build-extension.mjs') --desktop --output (Join-Path $bundle 'extension')
 if($LASTEXITCODE){throw 'Build da extensão falhou'}
@@ -24,7 +24,7 @@ if((Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant() 
 Copy-Item -LiteralPath (Join-Path $root 'release/INSTALL.desktop.pt-BR.md') -Destination (Join-Path $bundle 'LEIA-ME.md')
 $hashes=Get-ChildItem -LiteralPath $bundle -File -Recurse | Sort-Object FullName | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()+'  '+[IO.Path]::GetRelativePath($bundle,$_.FullName).Replace('\','/') }
 $hashes|Set-Content -LiteralPath (Join-Path $bundle 'SHA256SUMS.txt') -Encoding utf8
-$zip=Join-Path $out 'Dwnl-0.2.0-windows-x64.zip'
+$zip=Join-Path $out 'Dwnl-0.2.1-windows-x64.zip'
 Compress-Archive -LiteralPath $bundle -DestinationPath $zip -CompressionLevel Optimal
 $archive=[IO.Compression.ZipFile]::OpenRead($zip)
 try {
@@ -43,4 +43,4 @@ try {
  if($seen.Count -ne $expected.Count){throw 'Arquivos ausentes no ZIP'}
 } finally {$archive.Dispose()}
 $artifact=Get-Item -LiteralPath $zip
-[ordered]@{version='0.2.0';zip=$artifact.FullName;sha256=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant();sizeBytes=$artifact.Length;installed=$false;published=$false}|ConvertTo-Json|Tee-Object -FilePath (Join-Path $out 'release-report.json')
+[ordered]@{version='0.2.1';zip=$artifact.FullName;sha256=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant();sizeBytes=$artifact.Length;installed=$false;published=$false}|ConvertTo-Json|Tee-Object -FilePath (Join-Path $out 'release-report.json')

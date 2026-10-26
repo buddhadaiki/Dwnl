@@ -2,7 +2,7 @@
 
 <img src="docs/branding/dwnl-logo.png" width="96" height="96" alt="Logo Dwnl: seta azul de download sobre uma bandeja">
 
-## Aplicativo Windows 0.2.0
+## Aplicativo Windows 0.2.1
 
 A nova etapa oferece aplicativo Go/Wails com WebView2, fila persistente independente do navegador, bandeja e extensão auxiliar. Interface dark com azul royal. A conexão local responde antes da preparação dos componentes; a ponte usa pipe restrito ao usuário, sem servidor de rede. O modo legado/Ubuntu abaixo continua separado.
 
