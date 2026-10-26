@@ -16,6 +16,7 @@ Requer Windows x64, internet durante a instalação e Microsoft Edge WebView2 Ru
 
 - **Download cancelado não volta mais para a fila.** Cancelar e, em seguida, sair do app (ou um encerramento inesperado) fazia o download reaparecer como interrompido, e **Continuar fila** o baixava de novo.
 - **Download não fica preso em "Analisando".** Se a fila não pudesse ser salva no início de um download, ele continuava aparecendo como ativo sem estar em execução.
+- **Antivírus não interrompe mais um download ao salvar o histórico.** Se um antivírus ou o indexador do Windows estivesse lendo o arquivo de histórico no momento em que ele era salvo, o download ou a troca de pasta podia falhar com "Acesso negado". Agora o app aguarda um instante e tenta de novo, como já fazia com a fila.
 - **Arquivar histórico não trava o aplicativo.** Com disco lento ou antivírus, o arquivamento podia congelar a janela, interromper o progresso do download ativo e fazer a extensão abrir uma segunda cópia do Dwnl.
 - **A extensão não abre outra cópia do app quando ele está ocupado.** Uma resposta lenta deixava de ser confundida com app fechado.
 - **Mensagens de erro em português são mantidas após reiniciar.** Antes, o histórico passava a mostrar textos como "Task ended with ENGINE_ERROR".
@@ -32,8 +33,10 @@ Requer Windows x64, internet durante a instalação e Microsoft Edge WebView2 Ru
 
 Os testes Go (Linux), o typecheck, os 163 testes TypeScript e os testes do modelo de interface passaram. O código exclusivo de Windows (app, ponte e comunicação local) foi compilado e verificado com `go vet`.
 
-<!-- Preencher antes de publicar: resultado da suíte Go no Windows e dos testes manuais do app/extensão. -->
+No Windows 11 x64, a suíte Go completa (`go test -p 1 ./... -count=1`) passou no commit do pacote: 177 testes e 192 subtestes em 12 pacotes, incluindo app, ponte e comunicação local, com as ferramentas de mídia reais. Só o teste opcional do seletor de pasta nativo foi ignorado. O typecheck, os 211 testes TypeScript e os 9 testes do modelo de interface também passaram no Windows. Essa rodada encontrou a falha de "Acesso negado" descrita acima e dois problemas só da infraestrutura de testes, todos corrigidos, e ganhou um teste da ponte com o app ocupado.
+
+O aplicativo empacotado foi exercitado sem instalação, com estado e pasta isolados: download real de um Shorts (H.264/AAC conferido com ffprobe); cancelamento seguido de encerramento forçado (o item reabriu como cancelado e **Continuar fila** não o baixou); estado "requer atenção" com um componente ausente, ainda analisando links; e resposta de adicionar download sem o endereço de origem. O roteiro manual na janela do app instalado e na extensão do Chrome ainda não foi executado.
 
 Continuam valendo os limites da 0.2.0: a transferência interrompida reinicia do começo; playlists e canais não estão incluídos; instalação em Windows limpo e integração com o Chrome pessoal ainda não foram validadas.
 
-<!-- Preencher antes de publicar: commit de origem e observação sobre os hashes dos arquivos. -->
+Compilado do commit `84d31ea71ad73de3e6f533f02608e0f64f93fff6`, com árvore de código limpa; os commits seguintes alteram só a configuração de testes e estas notas. O `Dwnl.exe` exercitado acima é o mesmo, com o mesmo SHA256, embutido no instalador desta publicação. Um novo build gera arquivos com hashes diferentes, portanto compare sempre com o `SHA256SUMS.txt` desta release. Nenhuma instalação pessoal foi alterada durante a geração.
