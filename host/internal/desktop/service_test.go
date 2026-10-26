@@ -26,6 +26,7 @@ type fakeEngine struct {
 	gate                               chan struct{}
 	started                            chan string
 	probeGate                          chan struct{}
+	probeErr, executeErr               error
 	changed                            bool
 	identities                         map[string]string
 }
@@ -41,7 +42,7 @@ func (f *fakeEngine) Probe(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
-	return nil
+	return f.probeErr
 }
 func (f *fakeEngine) Capabilities() contracts.Capabilities {
 	return contracts.Capabilities{Video: true, MP3: true, NetworkAccess: true}
@@ -89,6 +90,9 @@ func (f *fakeEngine) Execute(ctx context.Context, p contracts.DownloadPlan, emit
 	case <-f.gate:
 	case <-ctx.Done():
 		return contracts.CompletedFile{}, ctx.Err()
+	}
+	if f.executeErr != nil {
+		return contracts.CompletedFile{}, f.executeErr
 	}
 	data := []byte("real verified fixture bytes")
 	sum := sha256.Sum256(data)
@@ -513,6 +517,55 @@ func TestProbeTimeoutIsVisibleAndSnapshotRemainsAvailable(t *testing.T) {
 	snap := snapshot(t, s)
 	if snap.Readiness != "degraded" || !strings.Contains(snap.Error, "tempo limite") {
 		t.Fatalf("timeout: %+v", snap)
+	}
+}
+
+// Regression: 0.2.1 showed "Preparação incompleta: ENGINE_ERROR: The media
+// dependency could not process this input." when ffprobe was missing.
+func TestProbeEngineFailureIsShownInPortuguese(t *testing.T) {
+	f := newFake()
+	raw := "The media dependency could not process this input."
+	f.probeErr = &contracts.ProtocolError{Code: contracts.EngineError, Message: raw}
+	s := startService(t, fixtureConfig(t, f))
+	snap := snapshot(t, s)
+	want := "Preparação incompleta: " + protocolMessages[contracts.EngineError]
+	if snap.Readiness != "degraded" || snap.Error != want {
+		t.Fatalf("probe failure: %+v", snap)
+	}
+	if strings.Contains(snap.Error, raw) || strings.Contains(snap.Error, string(contracts.EngineError)) {
+		t.Fatalf("raw engine text reached the window: %q", snap.Error)
+	}
+}
+
+func TestFailedDownloadErrorIsShownInPortuguese(t *testing.T) {
+	f := newFake()
+	raw := "A private media dependency could not be executed."
+	f.executeErr = &contracts.ProtocolError{Code: contracts.DependencyUnavailable, Message: raw}
+	s := startService(t, fixtureConfig(t, f))
+	task := enqueue(t, s, selection(t, s, "engine-failure"))
+	waitStarted(t, f)
+	f.gate <- struct{}{}
+	waitFor(t, func() bool { return state(t, s, task.ID) == "failed" })
+	for _, got := range snapshot(t, s).Tasks {
+		if got.ID == task.ID && got.Error != protocolMessages[contracts.DependencyUnavailable] {
+			t.Fatalf("task error: %q", got.Error)
+		}
+	}
+}
+
+func TestSafeErrorNeverExposesProtocolText(t *testing.T) {
+	codes := []contracts.ErrorCode{contracts.InvalidMessage, contracts.MessageTooLarge, contracts.IncompatibleProtocol, contracts.UnknownOperation, contracts.InvalidSelection, contracts.SessionEnded, contracts.AnalysisExpired, contracts.InvalidCursor, contracts.Busy, contracts.RequestConflict, contracts.UnknownJob, contracts.DependencyUnavailable, contracts.MP3Unavailable, contracts.NoAudio, contracts.AccessRestricted, contracts.NetworkError, contracts.NetworkPolicyBlocked, contracts.DestinationError, contracts.DiskFull, contracts.EngineError, contracts.CancelFailed, contracts.InvalidOutput, contracts.InternalError, "FUTURE_CODE"}
+	raw := "Raw English diagnostic text."
+	for _, code := range codes {
+		for _, err := range []error{&contracts.ProtocolError{Code: code, Message: raw}, &contracts.ProtocolDecodeError{Code: code, Message: raw}, fmt.Errorf("wrapped: %w", &contracts.ProtocolError{Code: code, Message: raw})} {
+			got := safeError(err)
+			if got == "" || strings.Contains(got, raw) || strings.Contains(got, string(code)) {
+				t.Fatalf("%s: %q", code, got)
+			}
+		}
+		if _, ok := protocolMessages[code]; !ok && code != "FUTURE_CODE" {
+			t.Fatalf("%s has no Portuguese message", code)
+		}
 	}
 }
 func TestCallerDisconnectDoesNotCancelAcceptedDownload(t *testing.T) {
