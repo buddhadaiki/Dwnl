@@ -4,3 +4,6 @@
 
 # Linux entry points must remain executable by sh after Windows checkouts.
 /installer/linux/*.sh text eol=lf
+
+# Claude Code hooks run under bash on every platform.
+/.claude/hooks/*.sh text eol=lf
