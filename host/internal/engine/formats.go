@@ -22,7 +22,9 @@ type extractedFormat struct {
 	ABR       float64 `json:"abr"`
 	TBR       float64 `json:"tbr"`
 	DRM       bool    `json:"has_drm"`
-	Protocol  string  `json:"protocol"`
+	// Omitted when empty so SelectionIdentity, which clears it, keeps the
+	// digest queued tasks persisted before this field existed.
+	Protocol string `json:"protocol,omitempty"`
 }
 type extractedItem struct {
 	ID           string            `json:"id"`

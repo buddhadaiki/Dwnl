@@ -1,7 +1,10 @@
 package engine
 
 import (
+	"crypto/sha256"
 	"dwnl/host/internal/contracts"
+	"encoding/hex"
+	"encoding/json"
 	"testing"
 )
 
@@ -83,5 +86,40 @@ func TestSelectionIdentityRejectsUnknownAndSeparatesAudio(t *testing.T) {
 	audio, _ := e.SelectionIdentity("a", "item", "")
 	if video == audio {
 		t.Fatal("audio and video identity collide")
+	}
+}
+
+// Queued tasks persist this digest; recovery after an upgrade must recompute
+// it byte for byte. legacyFormat is the format shape 0.2.x serialized.
+func TestSelectionIdentityKeepsThePersistedFormatAcrossNewMetadata(t *testing.T) {
+	type legacyFormat struct {
+		ID        string  `json:"format_id"`
+		Ext       string  `json:"ext"`
+		VCodec    string  `json:"vcodec"`
+		ACodec    string  `json:"acodec"`
+		Width     float64 `json:"width"`
+		Height    float64 `json:"height"`
+		Size      float64 `json:"filesize"`
+		Estimated float64 `json:"filesize_approx"`
+		ABR       float64 `json:"abr"`
+		TBR       float64 `json:"tbr"`
+		DRM       bool    `json:"has_drm"`
+	}
+	e := identityFixture()
+	item := e.analyses["a"].online.Items["item"]
+	for i := range item.Record.Formats {
+		item.Record.Formats[i].Protocol = "https"
+	}
+	got, err := e.SelectionIdentity("a", "item", "option")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(struct {
+		Source, Item, Mode string
+		Video, Audio       legacyFormat
+	}{"https://www.youtube.com/shorts/source", "source", "video", legacyFormat{ID: "137", VCodec: "avc1.640028", ACodec: "none", Width: 1080, Height: 1920}, legacyFormat{ID: "140", VCodec: "none", ACodec: "mp4a.40.2", ABR: 128}})
+	sum := sha256.Sum256(b)
+	if want := hex.EncodeToString(sum[:]); got != want {
+		t.Fatalf("identity %s no longer matches the persisted 0.2.x digest %s", got, want)
 	}
 }

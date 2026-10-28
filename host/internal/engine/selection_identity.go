@@ -9,7 +9,8 @@ import (
 
 // SelectionIdentity is a private, stable digest for durable queue recovery. It
 // binds the canonical source, actual extractor item and stream IDs and their
-// codec/dimension semantics; ephemeral UI IDs and estimated sizes are excluded.
+// codec/dimension semantics; ephemeral UI IDs, estimated sizes and the
+// delivery protocol (absent from digests persisted by 0.2.x) are excluded.
 // An empty optionID identifies the source audio selected for MP3 conversion.
 func (e *Engine) SelectionIdentity(analysisID, itemID, optionID string) (string, error) {
 	e.mu.Lock()
@@ -35,6 +36,7 @@ func (e *Engine) SelectionIdentity(analysisID, itemID, optionID string) (string,
 			if f.ID == id {
 				f.Size = 0
 				f.Estimated = 0
+				f.Protocol = ""
 				return f
 			}
 		}
