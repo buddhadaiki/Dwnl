@@ -94,3 +94,7 @@ O usuário carregou a extensão no perfil atual do Chrome. A mensagem inicial "A
 Consulte [as evidências de validação](docs/validation/2026-10-13-prototype.md), [a especificação aprovada](docs/superpowers/specs/2026-10-13-dwnl-design.md) e [o plano](docs/superpowers/plans/2026-10-13-dwnl-implementation-plan.md). Esses documentos distinguem comportamento pretendido de resultados efetivamente comprovados.
 
 A [retomada de 14/10](docs/validation/2026-10-14-recovery.md) preserva o diagnóstico NTFS e o estado histórico anterior à implementação online. A aquisição Gyan 9.0.2 foi reaproveitada no novo bootstrap; o bundle antigo conserva seus próprios pins.
+
+## Créditos
+
+Desenvolvido por Gabriel Souza, em um processo assistido por Claude (Anthropic) e Codex (OpenAI).
