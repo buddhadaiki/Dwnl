@@ -153,6 +153,40 @@ func IdentifyFile(path string) (FileIdentity, error) {
 	return identity(fd)
 }
 
+// HoldVerifiedFile proves from one descriptor that path is a regular file with
+// the recorded size and SHA-256, and keeps it open until release. Linux cannot
+// deny other writers, so a same-UID process can still change the bytes later.
+func HoldVerifiedFile(path string, size uint64, sha256Hex string) (FileIdentity, func(), error) {
+	fd, err := openPath(path, unix.O_RDONLY|unix.O_NONBLOCK)
+	if err != nil {
+		return FileIdentity{}, nil, err
+	}
+	var st unix.Stat_t
+	if err = unix.Fstat(fd, &st); err != nil {
+		unix.Close(fd)
+		return FileIdentity{}, nil, err
+	}
+	if st.Mode&unix.S_IFMT != unix.S_IFREG {
+		unix.Close(fd)
+		return FileIdentity{}, nil, errors.New("not a regular file")
+	}
+	id, err := identity(fd)
+	if err != nil {
+		unix.Close(fd)
+		return FileIdentity{}, nil, err
+	}
+	f := os.NewFile(uintptr(fd), path)
+	if uint64(st.Size) != size {
+		f.Close()
+		return FileIdentity{}, nil, errContentChanged
+	}
+	if err = matchContent(f, size, sha256Hex); err != nil {
+		f.Close()
+		return FileIdentity{}, nil, err
+	}
+	return id, func() { f.Close() }, nil
+}
+
 func sameEntry(parent int, name string, want FileIdentity) error {
 	fd, err := unix.Openat(parent, name, unix.O_PATH|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {

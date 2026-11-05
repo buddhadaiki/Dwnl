@@ -83,6 +83,7 @@ type queuedRecord struct {
 	DestinationPath string                 `json:"destinationPath"`
 	AttemptSession  string                 `json:"attemptSession,omitempty"`
 	AttemptJob      string                 `json:"attemptJob,omitempty"`
+	RenamedFrom     *renameOrigin          `json:"renamedFrom,omitempty"`
 }
 
 type cursor struct {

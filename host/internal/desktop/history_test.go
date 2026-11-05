@@ -169,3 +169,90 @@ func TestRenamedRecordCanBeRemovedAndRestarted(t *testing.T) {
 		t.Fatal("receipt does not match the renamed record", replay)
 	}
 }
+
+func TestRenameRefusesAFileWhoseBytesChangedButNotItsSize(t *testing.T) {
+	_, s, _, tasks := completedFixture(t, "edited")
+	before := taskByID(t, s, tasks[0].ID)
+	edited := strings.Repeat("x", int(before.CompletedFile.SizeBytes))
+	if err := os.WriteFile(before.CompletedFile.Path, []byte(edited), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rename(s, tasks[0].ID, "Outro nome"); !errors.Is(err, errFileUnavailable) {
+		t.Fatal("renamed content that is not the download", err)
+	}
+	if data, err := os.ReadFile(before.CompletedFile.Path); err != nil || string(data) != edited {
+		t.Fatal("edited file moved", err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(before.CompletedFile.Path), "Outro nome.mp4")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("a file appeared at the new name", err)
+	}
+	if after := taskByID(t, s, tasks[0].ID); after.Title != before.Title || after.CompletedFile.Path != before.CompletedFile.Path {
+		t.Fatal("record changed", after)
+	}
+}
+
+// stopMidRename saves the rename the way renameTask does before moving the
+// file, optionally moves it, and stops the service without finishing.
+func stopMidRename(t *testing.T, s *Service, id, title string, moveFile bool) (oldPath, newPath string) {
+	t.Helper()
+	s.mu.Lock()
+	before := s.tasks[s.findTask(id)]
+	s.mu.Unlock()
+	oldPath = before.Task.CompletedFile.Path
+	newPath = filepath.Join(filepath.Dir(oldPath), title+".mp4")
+	pending := before
+	pending.Task.Title = title
+	file := *before.Task.CompletedFile
+	file.Path = newPath
+	pending.Task.CompletedFile = &file
+	pending.RenamedFrom = &renameOrigin{Title: before.Task.Title, Path: oldPath}
+	if err := s.replaceRecord(id, before, pending); err != nil {
+		t.Fatal(err)
+	}
+	if moveFile {
+		if err := os.Rename(oldPath, newPath); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.Close()
+	return oldPath, newPath
+}
+
+func savedQueue(t *testing.T, s *Service) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(s.store.Root(), "desktop-queue.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func TestRenameCutShortAfterTheMoveKeepsTheNewName(t *testing.T) {
+	c, s, _, tasks := completedFixture(t, "moved")
+	_, newPath := stopMidRename(t, s, tasks[0].ID, "Nome novo", true)
+	c.Engine = newFake()
+	s2 := startService(t, c)
+	if got := taskByID(t, s2, tasks[0].ID); got.Title != "Nome novo" || got.CompletedFile.Path != newPath {
+		t.Fatal("rename not settled on the new name", got)
+	}
+	if strings.Contains(savedQueue(t, s2), "renamedFrom") {
+		t.Fatal("settled rename still saved as pending")
+	}
+}
+
+func TestRenameCutShortBeforeTheMoveKeepsTheOldName(t *testing.T) {
+	c, s, _, tasks := completedFixture(t, "unmoved")
+	title := taskByID(t, s, tasks[0].ID).Title
+	oldPath, _ := stopMidRename(t, s, tasks[0].ID, "Nome novo", false)
+	c.Engine = newFake()
+	s2 := startService(t, c)
+	if got := taskByID(t, s2, tasks[0].ID); got.Title != title || got.CompletedFile.Path != oldPath {
+		t.Fatal("rename not rolled back to the file's name", got)
+	}
+	if strings.Contains(savedQueue(t, s2), "renamedFrom") {
+		t.Fatal("settled rename still saved as pending")
+	}
+	if _, err := rename(s2, tasks[0].ID, "Nome novo"); err != nil {
+		t.Fatal("rename after recovery", err)
+	}
+}
