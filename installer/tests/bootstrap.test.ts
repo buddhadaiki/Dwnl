@@ -31,6 +31,45 @@ it('stages the helper and notices without embedding any supplier executable',()=
  expect(include).toContain('https://github.com/denoland/deno/releases/download/v2.9.7/');expect(include).toContain('RequireHash(');
  expect(include).toContain('66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a');
 });
+function desktopFixture(){
+ const f=fixture();
+ mkdirSync(join(f.root,'dist/desktop'),{recursive:true});
+ for(const name of ['Dwnl.exe','dwnl-host.exe']){
+  writeFileSync(join(f.root,'dist/desktop',name),f.pe);
+  writeFileSync(join(f.root,'dist/desktop',name+'.json'),JSON.stringify({name,version:'test',platform:'windows-x86_64',path:'dist/desktop/'+name,sizeBytes:256,sha256:f.sha256}));
+ }
+ writeFileSync(join(f.root,'dist/desktop/module-licenses.json'),'[]');
+ const identity=JSON.parse(readFileSync(join(f.root,'contracts/extension-identity.json'),'utf8'));
+ const extension=join(f.root,'dist/extension-build');
+ mkdirSync(join(extension,'src'),{recursive:true});
+ writeFileSync(join(extension,'manifest.json'),JSON.stringify({manifest_version:3,name:'Dwnl',version:'test',key:identity.key}));
+ writeFileSync(join(extension,'src/desktop-worker.js'),'export {};\n');
+ writeFileSync(join(extension,'.dwnl-extension-build'),'Dwnl owned extension build v1\n');
+ return {...f,extension,identity};
+}
+it('stages the Chrome extension beside the desktop app and removes its folders on uninstall',()=>{
+ const f=desktopFixture(); const output=join(f.root,'dist/desktop-bootstrap');
+ const result=run(`New-DwnlBootstrapStage -ProjectRoot ${quote(f.root)} -OutputRoot ${quote(output)} -Desktop -ExtensionRoot ${quote(f.extension)} | ConvertTo-Json -Depth 30 -Compress`);
+ expect(result.status,result.stderr).toBe(0); const report=JSON.parse(result.stdout);
+ expect(report.payloadFiles).toEqual(expect.arrayContaining(['Dwnl.exe','extension/manifest.json','extension/src/desktop-worker.js']));
+ // The build's ownership marker belongs to dist, not to the installation.
+ expect(report.payloadFiles.some((p:string)=>p.includes('.dwnl-extension-build'))).toBe(false);
+ expect(readFileSync(join(output,'payload/extension/src/desktop-worker.js'),'utf8')).toBe('export {};\n');
+ const include=readFileSync(join(output,'supplier-acquisition.iss'),'utf8');
+ expect(include).toContain("RequireHash(ExpandConstant('{app}\\extension\\src\\desktop-worker.js')");
+ const removals=include.slice(include.indexOf('procedure RemoveOwnedDirectories'));
+ expect(removals.indexOf("'{app}\\extension\\src'")).toBeGreaterThan(-1);
+ expect(removals.indexOf("'{app}\\extension\\src'")).toBeLessThan(removals.indexOf("'{app}\\extension'"));
+ expect(removals).toContain("'{app}\\bin'");expect(removals).toContain("'{app}\\licenses'");
+});
+it('refuses a desktop setup without the extension or with another extension identity',()=>{
+ const f=desktopFixture();
+ let result=run(`New-DwnlBootstrapStage -ProjectRoot ${quote(f.root)} -OutputRoot ${quote(join(f.root,'dist/no-extension'))} -Desktop`);
+ expect(result.status).not.toBe(0);expect(result.stderr).toMatch(/requires the built extension/);
+ writeFileSync(join(f.extension,'manifest.json'),JSON.stringify({manifest_version:3,name:'Other',version:'test',key:'MIIB'}));
+ result=run(`New-DwnlBootstrapStage -ProjectRoot ${quote(f.root)} -OutputRoot ${quote(join(f.root,'dist/other-extension'))} -Desktop -ExtensionRoot ${quote(f.extension)}`);
+ expect(result.status).not.toBe(0);expect(result.stderr).toMatch(/does not match the native host/);
+});
 it('checks acquired bytes before selecting any archive member',()=>{
  const f=fixture(); const source=join(f.root,'supplier.exe'); writeFileSync(source,f.pe);
  const supplier={name:'fixture',version:'test',archiveType:'exe',sha256:f.sha256,sizeBytes:256,files:[{entry:'',path:'bin/fixture.exe',sha256:f.sha256,sizeBytes:256}]};

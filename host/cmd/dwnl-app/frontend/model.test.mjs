@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {Window} from 'happy-dom';
-import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, choiceLabel, qualityName, newlyCompleted, clock} from './model.mjs';
+import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, choiceLabel, qualityName, newlyCompleted, clock, showExtensionCard} from './model.mjs';
 
 test('quality selection treats a portrait Short as 1080p, without selecting 4K', () => {
   const choices = [
@@ -50,6 +50,18 @@ test('polling slows when idle or disconnected', () => {
   assert.equal(pollDelay({readiness:'ready',tasks:[]}),8000);
   assert.equal(pollDelay({readiness:'ready',tasks:[{state:'downloading'}]}),1000);
   assert.equal(pollDelay(null,10),30000);
+  // While the user follows the Chrome steps, the connection shows up quickly.
+  assert.equal(pollDelay({readiness:'ready',tasks:[]},0,true),2000);
+  assert.equal(pollDelay({readiness:'ready',tasks:[{state:'downloading'}]},0,true),1000);
+});
+
+test('the Chrome card appears only for an installed, unconnected, undismissed extension', () => {
+  const extension = {folder:'C:\\Dwnl\\extension',connected:false};
+  assert.equal(showExtensionCard({extension},false),true);
+  assert.equal(showExtensionCard({extension},true),false);
+  assert.equal(showExtensionCard({extension:{...extension,connected:true}},false),false);
+  assert.equal(showExtensionCard({},false),false);
+  assert.equal(showExtensionCard(null,false),false);
 });
 
 test('quality labels name the resolution and size, never codecs or containers', () => {
@@ -170,6 +182,71 @@ test('late analysis results do not replace a link edited while analysis was runn
     assert.equal($('selection').hidden,true);
     assert.equal($('source-url').value,'https://youtube.com/shorts/second');
     assert.equal($('analyze-button').disabled,false);
+  } finally {
+    window.dispatchEvent(new window.Event('beforeunload')); await window.happyDOM.abort();
+    delete globalThis.document;delete globalThis.window;
+  }
+});
+
+test('the Chrome steps open the extensions page and notice the connection', async () => {
+  const window = new Window({url:'http://localhost/',settings:{disableJavaScriptFileLoading:true,disableJavaScriptEvaluation:true}});
+  window.document.write(await readFile(new URL('./index.html',import.meta.url),'utf8'));
+  globalThis.window = window; globalThis.document = window.document;
+  const folder = 'C:\\Users\\Ana\\AppData\\Local\\Dwnl\\extension';
+  const snapshot = {readiness:'ready',capabilities:{video:true,mp3:true,networkAccess:true},destination:{destinationId:'d'},tasks:[],extension:{folder,connected:false}};
+  const opened = []; let copied = '';
+  window.go={main:{App:{
+    Call:async method => { if(method==='snapshot')return snapshot; throw new Error('Unexpected method '+method); },
+    OpenChrome:async () => { opened.push('chrome'); },
+    OpenExtensionFolder:async () => { opened.push('folder'); },
+  }}};
+  window.runtime={ClipboardSetText:async text => { copied = text; return true; }};
+  const settle=async()=>{for(let i=0;i<4;i++)await new Promise(resolve=>setTimeout(resolve,0));};
+  try {
+    await import('./app.js?extension='+Date.now()); await settle();
+    const $=id=>window.document.getElementById(id);
+    assert.equal($('extension-card').hidden,false);
+    $('extension-connect').click(); await settle();
+    assert.equal($('extension-dialog').open,true);
+    assert.equal($('extension-folder').textContent,folder);
+    $('extension-open-chrome').click(); await settle();
+    $('extension-open-folder').click(); await settle();
+    assert.deepEqual(opened,['chrome','folder']);
+    // Chrome ignores chrome:// on its command line, so the address is copied instead.
+    $('extension-copy-address').click(); await settle();
+    assert.equal(copied,'chrome://extensions');
+    $('extension-copy').click(); await settle();
+    assert.equal(copied,folder);
+    assert.equal($('extension-copy').textContent,'Copiado');
+    assert.equal($('extension-copy-address').textContent,'Copiar');
+    assert.match($('extension-wait').textContent,/Aguardando/);
+    snapshot.extension = {folder,connected:true};
+    window.document.dispatchEvent(new window.Event('visibilitychange')); await settle();
+    assert.match($('extension-wait').textContent,/conectada/);
+    assert.equal($('extension-card').hidden,true);
+    assert.match($('extension-setting-status').textContent,/Conectada/);
+  } finally {
+    window.dispatchEvent(new window.Event('beforeunload')); await window.happyDOM.abort();
+    delete globalThis.document;delete globalThis.window;
+  }
+});
+
+test('dismissing the Chrome card keeps it closed on the next start', async () => {
+  const window = new Window({url:'http://localhost/',settings:{disableJavaScriptFileLoading:true,disableJavaScriptEvaluation:true}});
+  window.document.write(await readFile(new URL('./index.html',import.meta.url),'utf8'));
+  globalThis.window = window; globalThis.document = window.document;
+  window.go={main:{App:{Call:async method => {
+    if(method==='snapshot')return {readiness:'ready',capabilities:{video:true,mp3:true,networkAccess:true},destination:{destinationId:'d'},tasks:[],extension:{folder:'C:\\Dwnl\\extension',connected:false}};
+  }}}};
+  const settle=async()=>{for(let i=0;i<4;i++)await new Promise(resolve=>setTimeout(resolve,0));};
+  try {
+    await import('./app.js?dismiss='+Date.now()); await settle();
+    const $=id=>window.document.getElementById(id);
+    $('extension-dismiss').click(); await settle();
+    assert.equal($('extension-card').hidden,true);
+    assert.equal(window.localStorage.getItem('dwnl.extensionCardDismissed'),'1');
+    // Settings still offer the steps, so the card is never the only way in.
+    assert.equal($('extension-setting').hidden,false);
   } finally {
     window.dispatchEvent(new window.Event('beforeunload')); await window.happyDOM.abort();
     delete globalThis.document;delete globalThis.window;

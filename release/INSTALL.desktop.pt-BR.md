@@ -2,11 +2,10 @@
 
 ## Instalar
 
-1. Extraia este pacote em uma pasta permanente.
-2. Execute `Dwnl-Setup.exe`. O instalador é por usuário, não exige administrador e baixa as versões verificadas de yt-dlp, Deno e FFmpeg. Precisa de internet.
-3. Abra **Dwnl** pelo menu Iniciar. Cole um link e escolha o formato; o aplicativo funciona sem extensão.
-4. Para ações no navegador, abra `chrome://extensions`, ative **Modo do desenvolvedor**, clique **Carregar sem compactação** e escolha a pasta `extension` deste pacote.
-5. Se a extensão anterior já estava carregada, atualize-a para esta pasta/versão e recarregue. Use o app e a extensão 0.2.1 juntos: a ponte antiga usa outro protocolo.
+1. Execute `Dwnl-Setup.exe`. O instalador é por usuário, não exige administrador e baixa as versões verificadas de yt-dlp, Deno e FFmpeg. Precisa de internet. Ele instala o aplicativo e a extensão do Chrome juntos.
+2. Abra **Dwnl** pelo menu Iniciar. Cole um link e escolha o formato; o aplicativo funciona sem extensão.
+3. Para baixar direto do Chrome, clique em **Conectar ao Chrome** no aplicativo (ou em Configurações → Extensão do Chrome) e siga os passos. O Chrome só aceita extensões de fora da Chrome Web Store por um passo manual, feito uma vez: em `chrome://extensions`, ative **Modo do desenvolvedor**, clique em **Carregar sem compactação** e escolha `%LOCALAPPDATA%\Dwnl\extension`. Ao abrir o painel do Dwnl no Chrome, o aplicativo marca a extensão como conectada.
+4. Se uma versão anterior da extensão estava carregada de outra pasta, remova-a em `chrome://extensions` antes de carregar a da pasta do Dwnl.
 
 É necessário Microsoft Edge WebView2 Runtime (Evergreen). O setup detecta ausência antes de baixar os componentes e informa o endereço oficial de instalação: https://developer.microsoft.com/microsoft-edge/webview2/ . O runtime é compartilhado com outros aplicativos; nenhum Chromium completo é incluído no pacote.
 
@@ -24,9 +23,9 @@ O setup não possui assinatura digital. Compare `SHA256SUMS.txt` antes de execut
 
 ## Atualizar e remover
 
-Encerre o Dwnl pelo comando Sair antes de atualizar. O instalador recusa substituir arquivos em uso; não mata processos. Atualize app e extensão juntos. Preserve uma cópia do diretório de estado antes de voltar à versão anterior.
+Encerre o Dwnl pelo comando Sair antes de atualizar. O instalador recusa substituir arquivos em uso; não mata processos. Ele atualiza o app e a extensão juntos, na mesma pasta; depois, clique em **Recarregar** no cartão do Dwnl em `chrome://extensions` ou reinicie o Chrome. Preserve uma cópia do diretório de estado antes de voltar à versão anterior.
 
-Remova a extensão em `chrome://extensions` e desinstale **Dwnl** pelos aplicativos do Windows. Downloads e estado do usuário são preservados. A entrada de início automático é removida somente se pertencer à mesma instalação.
+Remova a extensão em `chrome://extensions` e desinstale **Dwnl** pelos aplicativos do Windows; a desinstalação apaga também a pasta da extensão. Downloads e estado do usuário são preservados. A entrada de início automático é removida somente se pertencer à mesma instalação.
 
 ## Alcance e validação
 

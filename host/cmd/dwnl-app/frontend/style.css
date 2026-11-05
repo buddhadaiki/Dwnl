@@ -101,6 +101,31 @@ select option{background:var(--surface);color:var(--text)}
 .destination-label{flex:1;min-width:0;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .destination .link-button{font-size:12px}
 
+/* Chrome extension */
+.extension-card{display:flex;align-items:center;gap:14px;margin-top:16px;padding:12px 12px 12px 16px;border-radius:10px;background:var(--surface);box-shadow:var(--shadow-card);transition:opacity .2s var(--ease),transform .2s var(--ease)}
+@starting-style{.extension-card{opacity:0;transform:translateY(4px)}}
+.extension-icon{display:grid;place-items:center;width:36px;height:36px;flex:none;border-radius:8px;background:var(--accent-soft);color:var(--accent-text)}
+.extension-text{flex:1;min-width:0}
+.extension-text h2{font-size:14px;line-height:20px;font-weight:600}
+.extension-text .hint{margin-top:2px}
+.extension-actions{display:flex;align-items:center;gap:8px;flex:none}
+.steps{margin:16px 0 0;padding:0;list-style:none;counter-reset:step}
+.steps li{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:12px 0 12px 36px;border-top:1px solid var(--divider);counter-increment:step}
+.steps li>span{flex:1;min-width:0}
+.steps li::before{content:counter(step);position:absolute;left:0;top:10px;width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600;line-height:24px;text-align:center;font-variant-numeric:tabular-nums}
+.steps strong{display:block}
+.steps small{display:block;margin-top:2px;color:var(--text-2);font-size:12px;line-height:16px}
+.path-row{display:flex;align-items:center;gap:4px;margin-top:8px}
+.path-row code{flex:1;min-width:0;padding:6px 8px;border-radius:6px;background:var(--sunken);box-shadow:inset 0 0 0 1px var(--stroke);font:12px/16px "Cascadia Mono",Consolas,monospace;overflow-wrap:anywhere;user-select:all}
+.path-row .link-button{font-size:12px}
+.extension-wait{display:flex;align-items:center;gap:8px;padding-top:12px;border-top:1px solid var(--divider);color:var(--text-2);font-size:13px}
+.extension-wait::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--caution)}
+.extension-wait.connected{color:var(--success)}
+.extension-wait.connected::before{background:var(--success)}
+#extension-dialog{width:min(520px,calc(100% - 32px))}
+#extension-dialog>.hint{margin-top:-8px}
+#extension-error{margin:12px 0 0}
+
 /* Lists */
 .transfers{margin-top:24px}
 .composer[hidden]+.transfers{margin-top:0}
@@ -177,5 +202,5 @@ input[role=switch]:checked::before{background:#fff;transform:translateX(20px)}
 
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(340%)}}
-@media(max-width:620px){.topbar{gap:12px;padding:0 8px 0 12px}.content{padding:16px 12px 32px}.url-row,.options{flex-wrap:wrap}.url-row .button,.options .button,.options .field,.segmented{flex:1 1 100%}.segmented label{flex:1;text-align:center}.task{grid-template-columns:20px minmax(0,1fr)}.task-actions{grid-column:2}.section-heading .hint{display:none}}
+@media(max-width:620px){.topbar{gap:12px;padding:0 8px 0 12px}.content{padding:16px 12px 32px}.url-row,.options{flex-wrap:wrap}.url-row .button,.options .button,.options .field,.segmented{flex:1 1 100%}.segmented label{flex:1;text-align:center}.task{grid-template-columns:20px minmax(0,1fr)}.task-actions{grid-column:2}.section-heading .hint{display:none}.extension-card{flex-wrap:wrap}.extension-actions{width:100%;justify-content:flex-end}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}.progress.indeterminate .progress-fill{transform:translateX(120%)}}
