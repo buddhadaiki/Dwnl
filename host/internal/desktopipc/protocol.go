@@ -34,6 +34,15 @@ type Response struct {
 }
 type Handler func(context.Context, string, json.RawMessage) (any, error)
 
+type requestIDKey struct{}
+
+// RequestID names the pipe request a handler is serving; it is empty for
+// calls that did not arrive through the pipe.
+func RequestID(ctx context.Context) string {
+	id, _ := ctx.Value(requestIDKey{}).(string)
+	return id
+}
+
 func Decode(data []byte) (Request, error) {
 	var r Request
 	d := json.NewDecoder(bytes.NewReader(data))
@@ -47,7 +56,7 @@ func Handle(ctx context.Context, h Handler, r Request) Response {
 	if r.Method == "archiveHistory" {
 		return Response{Version: Version, ID: r.ID, Error: &Error{Code: "APP_ONLY", Message: "Arquive o histórico pela janela do aplicativo Dwnl."}}
 	}
-	result, err := h(ctx, r.Method, r.Payload)
+	result, err := h(context.WithValue(ctx, requestIDKey{}, r.ID), r.Method, r.Payload)
 	if err == nil && (r.Method == "snapshot" || r.Method == "continue" || r.Method == "settings") {
 		result, err = compactSnapshot(result)
 	}

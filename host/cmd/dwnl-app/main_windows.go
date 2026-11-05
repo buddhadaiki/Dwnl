@@ -36,14 +36,16 @@ var assets embed.FS
 var icon []byte
 
 type App struct {
-	service     *desktop.Service
-	ctx         context.Context
-	ready       chan struct{}
-	stop        chan struct{}
-	quitOnce    sync.Once
-	executable  string
-	development bool
-	quitting    atomic.Bool
+	service       *desktop.Service
+	ctx           context.Context
+	ready         chan struct{}
+	stop          chan struct{}
+	quitOnce      sync.Once
+	executable    string
+	stateRoot     string
+	development   bool
+	quitting      atomic.Bool
+	extensionSeen atomic.Bool
 }
 
 func main() {
@@ -93,7 +95,7 @@ func run() error {
 			if *background {
 				method = "snapshot"
 			}
-			response, e := desktopipc.Call(ctx, *state, desktopipc.Request{Version: 2, ID: "second-instance", Method: method, Payload: json.RawMessage(`{}`)})
+			response, e := desktopipc.Call(ctx, *state, desktopipc.Request{Version: 2, ID: secondInstanceID, Method: method, Payload: json.RawMessage(`{}`)})
 			if e == nil && response.Error == nil {
 				return nil
 			}
@@ -110,8 +112,13 @@ func run() error {
 		return err
 	}
 	defer service.Close()
-	app := &App{service: service, ready: make(chan struct{}), stop: make(chan struct{}), executable: exe, development: !equalPath(*state, defaultState)}
-	server, err := desktopipc.Listen(*state, app.dispatch)
+	app := &App{service: service, ready: make(chan struct{}), stop: make(chan struct{}), executable: exe, stateRoot: *state, development: !equalPath(*state, defaultState)}
+	server, err := desktopipc.Listen(*state, func(ctx context.Context, method string, payload json.RawMessage) (any, error) {
+		if fromExtension(desktopipc.RequestID(ctx)) {
+			app.extensionConnected()
+		}
+		return app.dispatch(ctx, method, payload)
+	})
 	if err != nil {
 		return err
 	}

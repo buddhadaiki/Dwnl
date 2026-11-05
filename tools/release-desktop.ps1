@@ -10,14 +10,16 @@ while($cursor){if(Test-Path -LiteralPath $cursor){if((Get-Item -LiteralPath $cur
 if(Test-Path -LiteralPath $out){throw 'Use um diretório de saída novo'}
 if(-not $SkipBuild){& (Join-Path $PSScriptRoot 'build-desktop.ps1')}
 New-Item -ItemType Directory -Path $out | Out-Null
+# The setup installs the extension beside the app, so the package carries no separate copy.
+$extension=Join-Path $out 'extension'
+& node (Join-Path $PSScriptRoot 'build-extension.mjs') --desktop --output $extension
+if($LASTEXITCODE){throw 'Build da extensão falhou'}
 $stage=Join-Path $out 'bootstrap'
-& (Join-Path $PSScriptRoot 'bootstrap.ps1') -ProjectRoot $root -OutputRoot $stage -Desktop *> (Join-Path $out 'bootstrap.log')
+& (Join-Path $PSScriptRoot 'bootstrap.ps1') -ProjectRoot $root -OutputRoot $stage -Desktop -ExtensionRoot $extension *> (Join-Path $out 'bootstrap.log')
 $report=Get-Content -Raw -LiteralPath (Join-Path $stage 'package-report.json')|ConvertFrom-Json
-if(-not $report.desktop -or -not $report.compiledInstaller -or $report.installedOrRegistered){throw 'Bootstrap incompleto'}
+if(-not $report.desktop -or -not $report.compiledInstaller -or $report.installedOrRegistered -or $report.payloadFiles -notcontains 'extension/manifest.json'){throw 'Bootstrap incompleto'}
 $bundle=Join-Path $out 'Dwnl-0.2.1-windows-x64'
 New-Item -ItemType Directory -Path $bundle | Out-Null
-& node (Join-Path $PSScriptRoot 'build-extension.mjs') --desktop --output (Join-Path $bundle 'extension')
-if($LASTEXITCODE){throw 'Build da extensão falhou'}
 $setup=Join-Path $bundle 'Dwnl-Setup.exe'
 Copy-Item -LiteralPath (Join-Path $stage 'Dwnl-Setup.exe') -Destination $setup
 if((Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant() -cne $report.compiledInstaller.sha256){throw 'Hash do setup copiado diverge'}

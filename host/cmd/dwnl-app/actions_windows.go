@@ -87,8 +87,9 @@ func (a *App) dispatch(ctx context.Context, method string, payload json.RawMessa
 		}
 		return struct {
 			desktop.Snapshot
-			StartAtLogin bool `json:"startAtLogin"`
-		}{snapshot, enabled}, nil
+			StartAtLogin bool             `json:"startAtLogin"`
+			Extension    *extensionStatus `json:"extension,omitempty"`
+		}{snapshot, enabled, a.extensionStatus()}, nil
 	default:
 		return a.service.Dispatch(ctx, method, payload)
 	}
@@ -174,10 +175,10 @@ func (a *App) openCompleted(ctx context.Context, id string, folder bool) error {
 			}
 			return errors.New("O arquivo mudou ou não está mais disponível")
 		}
-		path, params := task.File.Path, (*uint16)(nil)
+		path, params := task.File.Path, ""
 		if folder {
 			// Explorer, from the system folder, opens with the file selected.
-			params, _ = win.UTF16PtrFromString(`/select,"` + path + `"`)
+			params = `/select,"` + path + `"`
 			path = filepath.Join(os.Getenv("SYSTEMROOT"), "explorer.exe")
 		} else {
 			switch strings.ToLower(filepath.Ext(path)) {
@@ -186,14 +187,26 @@ func (a *App) openCompleted(ctx context.Context, id string, folder bool) error {
 				return errors.New("Formato não permitido para abertura")
 			}
 		}
-		operation, _ := win.UTF16PtrFromString("open")
-		target, _ := win.UTF16PtrFromString(path)
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return win.ShellExecute(0, operation, target, params, nil, win.SW_SHOWNORMAL)
+		return shellOpen(path, params)
 	}
 	return errors.New("Download não encontrado")
+}
+func shellOpen(target, params string) error {
+	operation, _ := win.UTF16PtrFromString("open")
+	file, err := win.UTF16PtrFromString(target)
+	if err != nil {
+		return err
+	}
+	var args *uint16
+	if params != "" {
+		if args, err = win.UTF16PtrFromString(params); err != nil {
+			return err
+		}
+	}
+	return win.ShellExecute(0, operation, file, args, nil, win.SW_SHOWNORMAL)
 }
 func showStartupError(message string) {
 	title, _ := win.UTF16PtrFromString("Dwnl")

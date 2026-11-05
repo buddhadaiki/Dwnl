@@ -85,7 +85,13 @@ export function isVideoURL(value) {
   catch { return false; }
 }
 
-export function pollDelay(snapshot, failures = 0) {
+export function pollDelay(snapshot, failures = 0, waitingForExtension = false) {
   if (failures) return Math.min(30000, 2000 * 2 ** Math.min(failures, 4));
-  return snapshot?.readiness === 'preparing' || snapshot?.tasks?.some(t => activeStates.has(t.state)) ? 1000 : 8000;
+  if (snapshot?.readiness === 'preparing' || snapshot?.tasks?.some(t => activeStates.has(t.state))) return 1000;
+  return waitingForExtension ? 2000 : 8000;
+}
+
+// The setup ships the extension; the app reports it only when it is installed.
+export function showExtensionCard(snapshot, dismissed) {
+  return Boolean(snapshot?.extension && !snapshot.extension.connected && !dismissed);
 }

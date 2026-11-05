@@ -1,10 +1,11 @@
 [CmdletBinding()]
-param([string]$ProjectRoot,[string]$OutputRoot,[switch]$StageOnly,[switch]$Desktop)
+param([string]$ProjectRoot,[string]$OutputRoot,[switch]$StageOnly,[switch]$Desktop,[string]$ExtensionRoot)
 $bootstrapInvocation=$MyInvocation.InvocationName
 $bootstrapProject=$ProjectRoot
 $bootstrapOutput=$OutputRoot
 $bootstrapStageOnly=[bool]$StageOnly
 $bootstrapDesktop=[bool]$Desktop
+$bootstrapExtension=$ExtensionRoot
 . (Join-Path $PSScriptRoot 'package.ps1')
 
 function Assert-DwnlSuppliers {
@@ -70,7 +71,7 @@ function Import-DwnlSupplierArtifact {
 
 function Write-DwnlUTF8 {param([string]$Path,[string]$Text) [IO.File]::WriteAllText($Path,$Text,[Text.UTF8Encoding]::new($false))}
 function New-DwnlBootstrapStage {
-    param([string]$ProjectRoot,[string]$OutputRoot,[switch]$Desktop)
+    param([string]$ProjectRoot,[string]$OutputRoot,[switch]$Desktop,[string]$ExtensionRoot)
     $root=[IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\','/')
     $lock=Get-Content -Raw -LiteralPath (Join-Path $root 'release/suppliers.lock.json') | ConvertFrom-Json
     Assert-DwnlSuppliers $lock
@@ -114,6 +115,22 @@ function New-DwnlBootstrapStage {
             Copy-Item -LiteralPath $source -Destination (Join-Path $payload $relative)
             $files+=$relative;$expected[$relative]=$license.sha256
         }
+        # The Chrome extension installs beside the app, so one setup carries both.
+        # Chrome loads it from there by hand; the app window guides that step.
+        if(-not $ExtensionRoot){throw 'The desktop setup requires the built extension.'}
+        $extension=[IO.Path]::GetFullPath($ExtensionRoot)
+        $manifest=Get-Content -Raw -LiteralPath (Join-Path $extension 'manifest.json') | ConvertFrom-Json
+        if($manifest.key -cne $identity.key){throw 'The extension identity does not match the native host.'}
+        foreach($item in Get-ChildItem -LiteralPath $extension -Recurse -Force){
+            if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'The extension build contains a reparse point.'}
+            if($item.PSIsContainer -or $item.Name -ceq '.dwnl-extension-build'){continue}
+            $relative='extension/'+[IO.Path]::GetRelativePath($extension,$item.FullName).Replace('\','/')
+            if($relative -cnotmatch '^extension(/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$'){throw 'An extension file name is unsafe.'}
+            $dest=Join-Path $payload $relative
+            New-Item -ItemType Directory -Path (Split-Path $dest -Parent) -Force | Out-Null
+            Copy-Item -LiteralPath $item.FullName -Destination $dest
+            $files+=$relative;$expected[$relative]=Get-DwnlSha256 $item.FullName
+        }
     }
     $hashes=@();foreach($relative in $files){$path=Join-Path $payload $relative;$sha=Get-DwnlSha256 $path;if($sha -cne $expected[$relative]){throw 'Staged bootstrap payload hash mismatch.'};$hashes+=[ordered]@{path=$relative;sha256=$sha;sizeBytes=(Get-Item -LiteralPath $path).Length}}
     if(($hashes | Where-Object path -eq 'dwnl-host.exe').sha256 -cne $hostMetadata.sha256) {throw 'Staged helper hash mismatch.'}
@@ -139,8 +156,11 @@ function New-DwnlBootstrapStage {
     }
     foreach($file in $hashes){$dest=$file.path.Replace('/','\');$verify+="  RequireHash(ExpandConstant('{app}\$dest'), '$($file.sha256)');";$delete+="  DeleteIfOwned(ExpandConstant('{app}\$dest'), '$($file.sha256)');"}
     $acquire+='end;';$verify+='end;';$delete+='end;'
+    # Uninstall removes owned folders deepest first; RemoveDir keeps any that still hold files.
+    $directories=@($files+$supplierFiles.path | ForEach-Object {$d=[IO.Path]::GetDirectoryName($_.Replace('/','\'));while($d){$d;$d=[IO.Path]::GetDirectoryName($d)}} | Sort-Object -Unique | Sort-Object {$_.Split('\').Count} -Descending)
+    $remove=@('procedure RemoveOwnedDirectories();','begin')+@($directories | ForEach-Object {"  RemoveDir(ExpandConstant('{app}\$_'));"})+'end;'
     Write-DwnlUTF8 (Join-Path $out 'payload-files.iss') ($sourceLines -join "`r`n")
-    Write-DwnlUTF8 (Join-Path $out 'supplier-acquisition.iss') (($acquire+$verify+$delete) -join "`r`n")
+    Write-DwnlUTF8 (Join-Path $out 'supplier-acquisition.iss') (($acquire+$verify+$delete+$remove) -join "`r`n")
     $owned=@($files+$supplierFiles.path+'native-host.json'+'.dwnl-install-owner' | ForEach-Object {"'"+$_.Replace('/','\')+"'"})
     Write-DwnlUTF8 (Join-Path $out 'owned-paths.iss') ('Files := ['+($owned -join ', ')+'];')
     $report=[ordered]@{schemaVersion=1;desktop=[bool]$Desktop;packageMode='supplier-acquisition';redistributionReady=$false;completeCorrespondingSource=$false;identity=$identity;host=$hostMetadata;payloadFiles=$files;payloadHashes=$hashes;supplierFiles=$supplierFiles;compiledInstaller=$null;installedOrRegistered=$false}
@@ -153,7 +173,7 @@ if($bootstrapInvocation -ne '.') {
     $ProjectRoot=$bootstrapProject;$OutputRoot=$bootstrapOutput;$StageOnly=$bootstrapStageOnly
     if(-not $ProjectRoot){$ProjectRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))}
     if(-not $OutputRoot){$OutputRoot=Join-Path $ProjectRoot 'dist/bootstrap'}
-    $report=New-DwnlBootstrapStage $ProjectRoot $OutputRoot -Desktop:$bootstrapDesktop
+    $report=New-DwnlBootstrapStage $ProjectRoot $OutputRoot -Desktop:$bootstrapDesktop -ExtensionRoot $bootstrapExtension
     if(-not $StageOnly) {
         $metadata=Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot '.tools/inno/verified-inno.json') | ConvertFrom-Json
         $compiler=Assert-DwnlBinary $ProjectRoot ([pscustomobject]@{name='ISCC';version=$metadata.version;platform=$metadata.platform;path=$metadata.path;sha256=$metadata.sha256;sizeBytes=(Get-Item -LiteralPath (Join-Path $ProjectRoot $metadata.path)).Length})

@@ -63,6 +63,12 @@
       </div>
     </section>
 
+    <section id="extension-card" class="extension-card" aria-labelledby="extension-card-title" hidden>
+      <span class="extension-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M6.5 6.5h.01M9 6.5h.01M12 12v5M9.5 14.5 12 17l2.5-2.5"/></svg></span>
+      <div class="extension-text"><h2 id="extension-card-title">Baixe direto do Chrome</h2><p class="hint">A extensão do Dwnl já veio com o aplicativo. Ative-a uma vez no Chrome para baixar o vídeo da aba aberta.</p></div>
+      <div class="extension-actions"><button id="extension-dismiss" class="link-button" type="button">Agora não</button><button id="extension-connect" class="button" type="button">Conectar ao Chrome</button></div>
+    </section>
+
     <section class="transfers" aria-labelledby="transfers-title">
       <div id="list-heading" class="section-heading"><h2 id="transfers-title">Na fila</h2><span id="task-count" class="count"></span><span id="queue-hint" class="hint">Um download por vez, na ordem da fila</span><button id="archive-history" class="link-button" hidden>Limpar histórico</button></div>
       <div id="queue-limit-notice" class="notice" role="status" hidden><span id="queue-limit-text"></span> <button id="show-history-limit" class="link-button">Ver histórico</button></div>
@@ -93,10 +99,24 @@
   <dialog id="settings-dialog" aria-labelledby="settings-title">
     <form method="dialog" class="dialog-heading"><h2 id="settings-title">Configurações</h2><button class="icon-button" aria-label="Fechar configurações"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></form>
     <label class="setting-row"><span><strong>Iniciar com o Windows</strong><small>O Dwnl fica disponível na bandeja do sistema.</small></span><input id="start-at-login" type="checkbox" role="switch"></label>
+    <div id="extension-setting" class="exit-setting" hidden><span><strong>Extensão do Chrome</strong><small id="extension-setting-status">Ainda não conectada.</small></span><button id="extension-setting-button" class="button" type="button">Conectar</button></div>
     <p id="settings-error" class="notice error" role="alert" hidden></p>
     <div class="exit-setting"><span><strong>Sair do Dwnl</strong><small>Fechar a janela mantém os downloads rodando. Ao sair, eles param e a fila fica guardada.</small></span><button id="exit-button" class="button" type="button">Sair</button></div>
     <details class="dependencies"><summary>Componentes de download</summary><ul id="dependency-list"></ul></details>
     <p id="version-label" class="hint version">Dwnl para Windows</p>
+  </dialog>
+
+  <dialog id="extension-dialog" aria-labelledby="extension-title" aria-describedby="extension-description">
+    <form method="dialog" class="dialog-heading"><h2 id="extension-title">Conectar ao Chrome</h2><button class="icon-button" aria-label="Fechar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></form>
+    <p id="extension-description" class="hint">O Chrome só ativa extensões de fora da loja por este passo manual. É feito uma vez só.</p>
+    <ol class="steps">
+      <li><span><strong>Abra a página de extensões do Chrome</strong><small>Cole este endereço na barra do Chrome.</small><span class="path-row"><code id="extension-address">chrome://extensions</code><button id="extension-copy-address" class="link-button" type="button">Copiar</button><button id="extension-open-chrome" class="link-button" type="button">Abrir o Chrome</button></span></span></li>
+      <li><span><strong>Ative o Modo do desenvolvedor</strong><small>A chave fica no canto superior direito da página.</small></span></li>
+      <li><span><strong>Clique em Carregar sem compactação</strong><small>Na janela que abrir, cole este caminho no campo Pasta e confirme.</small><span class="path-row"><code id="extension-folder"></code><button id="extension-copy" class="link-button" type="button">Copiar</button><button id="extension-open-folder" class="link-button" type="button">Abrir pasta</button></span></span></li>
+      <li><span><strong>Clique no ícone do Dwnl no Chrome</strong><small>Ele fica no menu de extensões, no ícone de quebra-cabeça. Fixe-o para ter sempre à mão.</small></span></li>
+    </ol>
+    <p id="extension-wait" class="extension-wait" role="status">Aguardando a extensão…</p>
+    <p id="extension-error" class="notice error" role="alert" hidden></p>
   </dialog>
 
   <dialog id="archive-dialog" aria-labelledby="archive-title" aria-describedby="archive-description">

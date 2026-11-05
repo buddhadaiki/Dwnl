@@ -26,6 +26,20 @@ func TestErrorNeverReturnsSuccess(t *testing.T) {
 	}
 }
 
+func TestHandlerSeesTheRequestID(t *testing.T) {
+	seen := ""
+	Handle(context.Background(), func(ctx context.Context, _ string, _ json.RawMessage) (any, error) {
+		seen = RequestID(ctx)
+		return nil, nil
+	}, Request{ID: "panel-1", Method: "openApp"})
+	if seen != "panel-1" {
+		t.Fatalf("request id = %q", seen)
+	}
+	if RequestID(context.Background()) != "" {
+		t.Fatal("a context outside the pipe carries no request id")
+	}
+}
+
 func TestArchiveHistoryValidatesLocallyButCannotRunOverIPC(t *testing.T) {
 	req, err := Decode([]byte(`{"version":2,"id":"archive","method":"archiveHistory","payload":{}}`))
 	if err != nil {

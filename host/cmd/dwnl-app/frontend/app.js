@@ -1,7 +1,10 @@
-import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyCompleted, appendChoices, isVideoURL, pollDelay} from './model.mjs';
+import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyCompleted, appendChoices, isVideoURL, pollDelay, showExtensionCard} from './model.mjs';
 
 const $ = id => document.getElementById(id);
-const state = {snapshot:null, analysis:null, item:null, view:'queue', analyzing:false, enqueuing:false, loadingFormats:false, requestId:null, requestKey:null, failures:0, pollTimer:null, refreshing:false, selectionVersion:0, exiting:false, archiving:false, seen:null, toastTask:null, toastTimer:null, pastedWhileAnalyzing:false};
+const state = {snapshot:null, analysis:null, item:null, view:'queue', analyzing:false, enqueuing:false, loadingFormats:false, requestId:null, requestKey:null, failures:0, pollTimer:null, refreshing:false, selectionVersion:0, exiting:false, archiving:false, seen:null, toastTask:null, toastTimer:null, pastedWhileAnalyzing:false, extensionDismissed:false, copyTimer:null};
+// Remembered per WebView profile; the card is a nudge, Settings always keep the steps.
+const extensionDismissKey = 'dwnl.extensionCardDismissed';
+try { state.extensionDismissed = window.localStorage.getItem(extensionDismissKey) === '1'; } catch {}
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icons = {
   video:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/>',
@@ -46,6 +49,57 @@ function showView(view) {
   $('composer').hidden = view !== 'queue';
   $('queue-hint').hidden = view !== 'queue';
   renderTasks();
+  renderExtension();
+}
+
+function renderExtension() {
+  const extension = state.snapshot?.extension;
+  $('extension-card').hidden = state.view !== 'queue' || !showExtensionCard(state.snapshot, state.extensionDismissed);
+  $('extension-setting').hidden = !extension;
+  if (!extension) return;
+  // Long paths wrap after a separator, never inside a folder name; <wbr> adds no copied text.
+  const folder = $('extension-folder');
+  if (folder.dataset.path !== extension.folder) {
+    folder.dataset.path = extension.folder;
+    folder.replaceChildren(...extension.folder.split(/(?<=\\)/).flatMap((part, index) => index ? [document.createElement('wbr'), part] : [part]));
+  }
+  $('extension-setting-status').textContent = extension.connected ? 'Conectada.' : 'Ainda não conectada.';
+  $('extension-setting-button').textContent = extension.connected ? 'Ver passos' : 'Conectar';
+  $('extension-wait').textContent = extension.connected ? 'Extensão conectada. Já pode baixar pelo Chrome.' : 'Aguardando a extensão…';
+  $('extension-wait').classList.toggle('connected', Boolean(extension.connected));
+}
+
+function openExtensionSteps() {
+  notice('extension-error', null);
+  if ($('settings-dialog').open) $('settings-dialog').close();
+  $('extension-dialog').showModal();
+  schedulePoll();
+}
+
+// These run in the window only; the extension bridge cannot reach them.
+async function windowAction(button, name) {
+  const run = window.go?.main?.App?.[name];
+  button.disabled = true;
+  notice('extension-error', null);
+  try {
+    if (typeof run !== 'function') throw new Error('Esta ação não está disponível. Feche e abra o Dwnl novamente.');
+    await run();
+  } catch (error) { notice('extension-error', error); }
+  finally { button.disabled = false; }
+}
+
+const copyButtons = ['extension-copy-address','extension-copy'];
+async function copyText(button, text) {
+  if (!text) return;
+  notice('extension-error', null);
+  try {
+    const copied = await (window.runtime?.ClipboardSetText?.(text) ?? navigator.clipboard.writeText(text));
+    if (copied === false) throw new Error('clipboard');
+    for (const id of copyButtons) $(id).textContent = 'Copiar';
+    button.textContent = 'Copiado';
+    clearTimeout(state.copyTimer);
+    state.copyTimer = setTimeout(() => { for (const id of copyButtons) $(id).textContent = 'Copiar'; }, 2000);
+  } catch { notice('extension-error', 'Não foi possível copiar. Selecione o texto e use Ctrl+C.'); }
 }
 
 function renderReadiness() {
@@ -311,7 +365,8 @@ async function loadMore() {
 
 function schedulePoll() {
   clearTimeout(state.pollTimer);
-  if (!document.hidden && !state.exiting) state.pollTimer = setTimeout(refresh, pollDelay(state.snapshot,state.failures));
+  const waitingForExtension = $('extension-dialog').open && !state.snapshot?.extension?.connected;
+  if (!document.hidden && !state.exiting) state.pollTimer = setTimeout(refresh, pollDelay(state.snapshot,state.failures,waitingForExtension));
 }
 
 async function refresh() {
@@ -328,6 +383,7 @@ async function refresh() {
     notice('global-error',null);
     renderReadiness();
     renderTasks();
+    renderExtension();
     if (finished.length) showToast(finished.at(-1));
   } catch (error) {
     state.failures++;
@@ -372,6 +428,17 @@ $('toast-close').addEventListener('click',hideToast);
 $('toast').addEventListener('mouseenter',() => clearTimeout(state.toastTimer));
 $('toast').addEventListener('mouseleave',() => { if (!$('toast').hidden) state.toastTimer = setTimeout(hideToast, 4000); });
 $('settings-button').addEventListener('click',() => $('settings-dialog').showModal());
+$('extension-connect').addEventListener('click',openExtensionSteps);
+$('extension-setting-button').addEventListener('click',openExtensionSteps);
+$('extension-dismiss').addEventListener('click',() => {
+  state.extensionDismissed = true;
+  try { window.localStorage.setItem(extensionDismissKey,'1'); } catch {}
+  renderExtension();
+});
+$('extension-open-chrome').addEventListener('click',() => windowAction($('extension-open-chrome'),'OpenChrome'));
+$('extension-open-folder').addEventListener('click',() => windowAction($('extension-open-folder'),'OpenExtensionFolder'));
+$('extension-copy-address').addEventListener('click',() => copyText($('extension-copy-address'),$('extension-address').textContent));
+$('extension-copy').addEventListener('click',() => copyText($('extension-copy'),state.snapshot?.extension?.folder));
 $('start-at-login').addEventListener('change', async () => {
   const input = $('start-at-login');
   input.disabled = true;
@@ -436,5 +503,5 @@ $('archive-confirm').addEventListener('click', async () => {
   }
 });
 
-window.addEventListener('beforeunload',() => { clearTimeout(state.pollTimer); clearTimeout(state.toastTimer); });
+window.addEventListener('beforeunload',() => { clearTimeout(state.pollTimer); clearTimeout(state.toastTimer); clearTimeout(state.copyTimer); });
 refresh();

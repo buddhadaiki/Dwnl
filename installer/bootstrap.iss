@@ -171,6 +171,5 @@ begin
   if DeleteOwnedManifestFor(ExpandConstant('{app}'), Registered) then begin
     RegDeleteValue(HKCU, NativeKey, ''); RegDeleteKeyIfEmpty(HKCU, NativeKey);
   end;
-  RemoveDir(ExpandConstant('{app}\bin'));
-  RemoveDir(ExpandConstant('{app}\licenses'));
+  RemoveOwnedDirectories();
 end;
