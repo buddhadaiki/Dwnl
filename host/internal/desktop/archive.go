@@ -180,7 +180,12 @@ func (s *Service) writeArchived(record queuedRecord) error {
 	}
 	return syncArchive(path)
 }
-func (s *Service) archiveHistory(ctx context.Context) (ArchiveResult, error) {
+
+// archiveHistory moves finished records out of the list, or only the record
+// with the given ID. Their receipts keep replays from downloading them again.
+func (s *Service) archiveHistory(ctx context.Context, id string) (ArchiveResult, error) {
+	s.historyMu.Lock()
+	defer s.historyMu.Unlock()
 	s.mu.Lock()
 	if s.readiness == "preparing" {
 		s.mu.Unlock()
@@ -192,9 +197,17 @@ func (s *Service) archiveHistory(ctx context.Context) (ArchiveResult, error) {
 	}
 	var candidates []queuedRecord
 	for _, record := range s.tasks {
-		if archivable(record.Task.State) && record.Task.ID != s.activeID {
+		if (id == "" || record.Task.ID == id) && archivable(record.Task.State) && record.Task.ID != s.activeID {
 			candidates = append(candidates, record)
 		}
+	}
+	if id != "" && len(candidates) == 0 {
+		known := s.findTask(id) >= 0
+		s.mu.Unlock()
+		if known {
+			return ArchiveResult{}, errors.New("Só downloads finalizados podem sair do histórico.")
+		}
+		return ArchiveResult{}, errors.New("Download desconhecido.")
 	}
 	s.mu.Unlock()
 	// Receipt fsyncs run without s.mu so snapshots and engine progress never

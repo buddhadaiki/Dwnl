@@ -40,14 +40,20 @@ func TestHandlerSeesTheRequestID(t *testing.T) {
 	}
 }
 
-func TestArchiveHistoryValidatesLocallyButCannotRunOverIPC(t *testing.T) {
-	req, err := Decode([]byte(`{"version":2,"id":"archive","method":"archiveHistory","payload":{}}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	called := false
-	response := Handle(context.Background(), func(context.Context, string, json.RawMessage) (any, error) { called = true; return nil, nil }, req)
-	if called || response.Error == nil || response.Error.Code != "APP_ONLY" {
-		t.Fatalf("archive escaped local app boundary: %+v", response)
+func TestHistoryEditsValidateLocallyButCannotRunOverIPC(t *testing.T) {
+	for _, message := range []string{
+		`{"version":2,"id":"archive","method":"archiveHistory","payload":{}}`,
+		`{"version":2,"id":"archive-one","method":"archiveHistory","payload":{"id":"task"}}`,
+		`{"version":2,"id":"rename","method":"renameTask","payload":{"id":"task","title":"Novo"}}`,
+	} {
+		req, err := Decode([]byte(message))
+		if err != nil {
+			t.Fatal(err)
+		}
+		called := false
+		response := Handle(context.Background(), func(context.Context, string, json.RawMessage) (any, error) { called = true; return nil, nil }, req)
+		if called || response.Error == nil || response.Error.Code != "APP_ONLY" {
+			t.Fatalf("%s escaped local app boundary: %+v", req.Method, response)
+		}
 	}
 }

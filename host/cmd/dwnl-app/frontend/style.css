@@ -1,6 +1,6 @@
 /* Follows the Windows light/dark setting; royal blue is the only accent. */
 :root{color-scheme:light dark;--bg:#f3f3f3;--surface:#fff;--surface-hover:#f5f5f5;--sunken:#ebebeb;--field:#fff;--stroke:rgb(0 0 0/.07);--stroke-strong:rgb(0 0 0/.16);--divider:rgb(0 0 0/.07);--text:#1a1a1a;--text-2:#5c5c5c;--text-3:#737373;--accent:#4169e1;--accent-hover:#3a5fd2;--accent-press:#3354bb;--accent-text:#2f55c4;--accent-soft:rgb(65 105 225/.1);--success:#0f7b0f;--danger:#c42b1c;--danger-soft:rgb(196 43 28/.08);--caution:#9d5d00;--shadow-card:0 0 0 1px rgb(0 0 0/.06),0 1px 2px rgb(0 0 0/.05);--shadow-pop:0 0 0 1px rgb(0 0 0/.08),0 12px 40px rgb(0 0 0/.18);--ease:cubic-bezier(.2,0,0,1)}
-@media(prefers-color-scheme:dark){:root{--bg:#1c1c1c;--surface:#272727;--surface-hover:#303030;--sunken:#1f1f1f;--field:#1f1f1f;--stroke:rgb(255 255 255/.07);--stroke-strong:rgb(255 255 255/.15);--divider:rgb(255 255 255/.06);--text:#f3f3f3;--text-2:#b9b9b9;--text-3:#8f8f8f;--accent-hover:#4d74ea;--accent-press:#3a5fd2;--accent-text:#8fa9ff;--accent-soft:rgb(65 105 225/.2);--success:#6ccb5f;--danger:#ff99a4;--danger-soft:rgb(255 153 164/.1);--caution:#fce100;--shadow-card:0 0 0 1px rgb(255 255 255/.06);--shadow-pop:0 0 0 1px rgb(255 255 255/.08),0 16px 48px rgb(0 0 0/.5)}}
+@media(prefers-color-scheme:dark){:root{--bg:#1c1c1c;--surface:#272727;--surface-hover:#303030;--sunken:#1f1f1f;--field:#1f1f1f;--stroke:rgb(255 255 255/.07);--stroke-strong:rgb(255 255 255/.15);--divider:rgb(255 255 255/.06);--text:#f3f3f3;--text-2:#b9b9b9;--text-3:#8f8f8f;--accent-text:#8fa9ff;--accent-soft:rgb(65 105 225/.2);--success:#6ccb5f;--danger:#ff99a4;--danger-soft:rgb(255 153 164/.1);--caution:#fce100;--shadow-card:0 0 0 1px rgb(255 255 255/.06);--shadow-pop:0 0 0 1px rgb(255 255 255/.08),0 16px 48px rgb(0 0 0/.5)}}
 
 *{box-sizing:border-box}
 html{background:var(--bg)}
@@ -9,6 +9,8 @@ button,input,select{font:inherit;color:inherit}
 button{border:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
 button:disabled{cursor:default;opacity:.45}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::selection{background:rgb(65 105 225/.28)}
+input{caret-color:var(--accent)}
 [hidden]{display:none!important}
 h1,h2,h3,p{margin:0}
 h2,h3{text-wrap:balance}
@@ -35,11 +37,14 @@ p{text-wrap:pretty}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--caution)}
 .service-status.ready .status-dot{background:var(--success)}
 .service-status.failed .status-dot{background:var(--danger)}
-.icon-button{display:grid;place-items:center;width:36px;height:36px;border-radius:6px;color:var(--text-2);transition:background-color .12s ease,color .12s ease}
+.icon-button{position:relative;display:grid;place-items:center;width:36px;height:36px;border-radius:6px;color:var(--text-2);transition:background-color .12s ease,color .12s ease}
 .icon-button:hover:not(:disabled){background:var(--surface-hover);color:var(--text)}
 .icon-button .icon{width:20px;height:20px}
 .icon-button.small{width:32px;height:32px}
 .icon-button.small .icon{width:16px;height:16px}
+/* Icon buttons stay 36/32px visually but answer to a 40px target. */
+.icon-button::after{content:"";position:absolute;inset:-2px}
+.icon-button.small::after{inset:-4px}
 
 /* Layout */
 .content{max-width:800px;margin:0 auto;padding:24px 24px 48px}
@@ -52,6 +57,8 @@ p{text-wrap:pretty}
 .button.primary{background:var(--accent);color:#fff;box-shadow:none}
 .button.primary:hover:not(:disabled){background:var(--accent-hover)}
 .button.primary:active:not(:disabled){background:var(--accent-press)}
+.button.danger{color:var(--danger)}
+.button.danger:hover:not(:disabled){background:var(--danger-soft)}
 .button:active:not(:disabled),.task-actions button:active:not(:disabled),.icon-button:active:not(:disabled){transform:scale(.96)}
 .link-button{height:32px;padding:0 4px;color:var(--accent-text);font-weight:600;font-size:13px;white-space:nowrap;border-radius:4px}
 .link-button:hover:not(:disabled){text-decoration:underline;text-underline-offset:3px}
@@ -96,10 +103,12 @@ select option{background:var(--surface);color:var(--text)}
 .selection-footer{display:flex;justify-content:space-between;gap:12px;align-items:center;min-height:20px;margin-top:8px}
 .selection-footer:has(#format-hint:empty):has(#more-formats[hidden]){display:none}
 
-.destination{display:flex;align-items:center;gap:8px;margin:12px -4px 0 0;padding-top:12px;border-top:1px solid var(--divider);font-size:12px;color:var(--text-2)}
+.destination{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--divider);font-size:12px;color:var(--text-2)}
 .destination .icon{width:16px;height:16px}
 .destination-label{flex:1;min-width:0;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .destination .link-button{font-size:12px}
+/* Trailing text links sit on the container edge, not 4px inside it. */
+.destination .link-button,.selection-footer .link-button,.section-heading .link-button{margin-right:-4px}
 
 /* Chrome extension */
 .extension-card{display:flex;align-items:center;gap:14px;margin-top:16px;padding:12px 12px 12px 16px;border-radius:10px;background:var(--surface);box-shadow:var(--shadow-card);transition:opacity .2s var(--ease),transform .2s var(--ease)}
@@ -141,7 +150,8 @@ select option{background:var(--surface);color:var(--text)}
 .task-icon{display:grid;place-items:center;color:var(--text-3)}
 .task-icon .icon{width:20px;height:20px}
 .task.completed .task-icon{color:var(--success)}
-.task.failed .task-icon,.task.interrupted .task-icon{color:var(--danger)}
+.task.failed .task-icon{color:var(--danger)}
+.task.interrupted .task-icon,.task.interrupted .task-status{color:var(--caution)}
 .task-title{font-size:14px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .task-meta{display:flex;flex-wrap:wrap;gap:0 6px;margin-top:2px;color:var(--text-2);font-size:12px;line-height:16px;font-variant-numeric:tabular-nums}
 .task-meta span+span::before{content:"·";margin-right:6px;color:var(--text-3)}
@@ -159,6 +169,18 @@ select option{background:var(--surface);color:var(--text)}
 .task-actions button[data-action=openFolder]:hover:not(:disabled){background:var(--accent-soft);color:var(--accent-text)}
 .task-actions button[data-action=cancel]:hover:not(:disabled){color:var(--danger);background:var(--danger-soft)}
 .task-actions .icon{width:16px;height:16px;stroke-width:2}
+.task-actions button.icon-only{width:32px;padding:0;justify-content:center}
+.task-actions button[data-action=remove]:hover:not(:disabled){color:var(--danger);background:var(--danger-soft)}
+/* Starting over is the way out of a failed row, so it reads as the row's action. */
+.task-actions button[data-action=retry]{color:var(--accent-text)}
+.task-actions button[data-action=retry]:hover:not(:disabled){background:var(--accent-soft);color:var(--accent-text)}
+/* Icon buttons name their action in a tip, sooner than the system title tip.
+   ::after already widens the hit area, so the tip uses ::before. */
+.task-actions button[data-tip]::before{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;z-index:5;padding:4px 8px;border-radius:4px;background:var(--surface);color:var(--text);box-shadow:var(--shadow-pop);font-size:12px;line-height:16px;font-weight:400;white-space:nowrap;pointer-events:none;opacity:0;transform:translate(-50%,2px);transition:opacity .12s ease,transform .12s ease}
+.task-actions button[data-tip]:is(:hover,:focus-visible)::before{opacity:1;transform:translate(-50%,0);transition-delay:.3s}
+/* The last tip ends at its button, so it never runs past the window edge. */
+.task-actions button[data-tip]:last-child::before{left:auto;right:0;transform:translateY(2px)}
+.task-actions button[data-tip]:last-child:is(:hover,:focus-visible)::before{transform:none}
 /* 32px controls keep a 40px vertical hit area without overlapping neighbours. */
 .task-actions button,.link-button{position:relative}
 .task-actions button::after,.link-button::after,.field-button::after{content:"";position:absolute;inset:-4px 0}
@@ -197,7 +219,14 @@ input[role=switch]:checked::before{background:#fff;transform:translateX(20px)}
 .dependencies li{display:flex;justify-content:space-between;gap:16px;padding:4px 0;color:var(--text-2);font-size:12px;font-variant-numeric:tabular-nums}
 .version{margin-top:12px}
 #archive-dialog>p{margin-top:8px}
-#archive-dialog .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:24px}
+#archive-dialog .dialog-actions,#rename-dialog .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:24px}
+#remove-dialog>p{margin-top:8px;overflow-wrap:anywhere}
+#remove-dialog .dialog-actions{display:flex;justify-content:space-between;gap:8px;margin-top:24px}
+#rename-dialog .field{margin-top:16px}
+#rename-dialog .hint{margin-top:8px}
+#rename-error,#remove-error{margin:12px 0 0}
+.text-field{width:100%;height:36px;padding:0 10px;border:1px solid var(--stroke-strong);border-radius:6px;background:var(--field);transition:border-color .12s ease,box-shadow .12s ease}
+.text-field:focus{outline:none;border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 #queue-limit-notice .link-button{height:auto;margin-left:6px}
 
 @keyframes spin{to{transform:rotate(360deg)}}

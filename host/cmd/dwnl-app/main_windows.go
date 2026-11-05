@@ -1,5 +1,8 @@
 package main
 
+// The program icon (Explorer, taskbar, window) is linked from this resource.
+//go:generate go run ../dwnl-icon -master ../../../docs/branding/dwnl-logo.png -o rsrc_windows_amd64.syso
+
 import (
 	"context"
 	"crypto/sha256"

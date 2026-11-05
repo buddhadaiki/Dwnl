@@ -62,7 +62,7 @@ export function mountPopup(document: Document, options: PopupOptions): { ready: 
     text('onboarding-title', state.connection === 'incompatible' ? 'Atualize o pacote Dwnl' : state.connection === 'missing-host' ? 'Falta o auxiliar local' : 'Reconecte o auxiliar');
     text('onboarding-detail', state.connection === 'incompatible' ? errorLabels.INCOMPATIBLE_PROTOCOL : state.connection === 'missing-host' ? 'Instale o auxiliar uma vez para salvar arquivos e converter áudio no seu computador.' : 'A conexão terminou. O resultado anterior precisa ser verificado; nenhuma tarefa será reiniciada automaticamente.');
     text('local-installer', installerInstruction ?? (installerAvailable ? 'Baixe o instalador incluído e abra-o manualmente. Depois, tente conectar novamente.' : 'Instale o auxiliar seguindo o LEIA-ME do pacote para seu sistema (Windows ou Ubuntu). Depois, tente conectar novamente.'));
-    hide('install', !installerAvailable); disable('install', !!pending); disable('reconnect', !!pending);
+    hide('install', !installerAvailable); el('reconnect').classList.toggle('primary', !installerAvailable); disable('install', !!pending); disable('reconnect', !!pending);
     hide('network-notice', !networkBlocked && unavailableDependencies.length === 0);
     text('network-notice', unavailableDependencies.length > 0
       ? `Dependências indisponíveis no auxiliar: ${unavailableDependencies.join(', ')}. Reinstale o pacote Dwnl e tente conectar novamente.`
@@ -70,11 +70,13 @@ export function mountPopup(document: Document, options: PopupOptions): { ready: 
     hide('error', !state.error); text('error', state.error ? errorLabels[state.error.code] : '');
     disable('current-tab', !!pending);
     disable('analyze', !connected || !!pending || active || networkBlocked || state.confirmation === 'checking');
-    text('analyze', pending === 'analyze' ? 'Analisando…' : 'Analisar →');
+    text('analyze', pending === 'analyze' ? 'Analisando…' : 'Analisar');
+    // One primary action at a time: reconnecting, then analyzing, then saving.
+    el('analyze').classList.toggle('primary', connected && !item);
     hide('selection', !item);
     if (item) {
       fillOptions('item', state.analysis!.items.map(value => ({ value: value.itemId, label: value.title })), item.itemId);
-      hide('item', state.analysis!.items.length === 1); hide('item-label', state.analysis!.items.length === 1);
+      hide('item-field', state.analysis!.items.length === 1);
       text('media-title', item.title); text('media-detail', `${formatDuration(item.durationSeconds)} · ${item.hasAudio ? 'Com áudio' : item.audioUnknown ? 'Áudio a confirmar após baixar' : 'Sem áudio'}`);
       const audioAvailable = !!(item.hasAudio || item.audioUnknown) && !!state.handshake?.capabilities.mp3;
       disable('mode-mp3', !audioAvailable || !!pending);
@@ -90,7 +92,7 @@ export function mountPopup(document: Document, options: PopupOptions): { ready: 
       el<HTMLSelectElement>('bitrate').value = String(state.bitrateKbps);
       hide('more-formats', !item.formatsCursor); disable('more-formats', !!pending);
       text('destination', state.destination?.label ?? 'Pasta não confirmada'); disable('choose-destination', !connected || !!pending || active);
-      disable('start', !!pending || networkBlocked || !startPayload(state)); text('start', pending === 'start' ? 'Confirmando início…' : state.mode === 'mp3' ? 'Criar MP3 ↧' : 'Salvar vídeo ↧');
+      disable('start', !!pending || networkBlocked || !startPayload(state)); text('start', pending === 'start' ? 'Confirmando início…' : state.mode === 'mp3' ? 'Criar MP3' : 'Salvar vídeo');
     }
     const job = state.job;
     hide('job', !job && !state.pendingStartRequestId);

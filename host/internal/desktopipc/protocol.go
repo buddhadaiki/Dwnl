@@ -14,7 +14,10 @@ import (
 const Version = 2
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
-var methods = map[string]bool{"snapshot": true, "analyze": true, "listFormats": true, "enqueue": true, "cancel": true, "continue": true, "chooseDestination": true, "openApp": true, "openFile": true, "openFolder": true, "settings": true, "archiveHistory": true}
+var methods = map[string]bool{"snapshot": true, "analyze": true, "listFormats": true, "enqueue": true, "cancel": true, "continue": true, "chooseDestination": true, "openApp": true, "openFile": true, "openFolder": true, "settings": true, "archiveHistory": true, "renameTask": true}
+
+// History edits move or drop the user's records, so only the window may ask.
+var appOnly = map[string]string{"archiveHistory": "Arquive o histórico pela janela do aplicativo Dwnl.", "renameTask": "Renomeie downloads pela janela do aplicativo Dwnl."}
 
 type Request struct {
 	Version int             `json:"version"`
@@ -53,8 +56,8 @@ func Decode(data []byte) (Request, error) {
 	return r, nil
 }
 func Handle(ctx context.Context, h Handler, r Request) Response {
-	if r.Method == "archiveHistory" {
-		return Response{Version: Version, ID: r.ID, Error: &Error{Code: "APP_ONLY", Message: "Arquive o histórico pela janela do aplicativo Dwnl."}}
+	if message, ok := appOnly[r.Method]; ok {
+		return Response{Version: Version, ID: r.ID, Error: &Error{Code: "APP_ONLY", Message: message}}
 	}
 	result, err := h(context.WithValue(ctx, requestIDKey{}, r.ID), r.Method, r.Payload)
 	if err == nil && (r.Method == "snapshot" || r.Method == "continue" || r.Method == "settings") {

@@ -3,51 +3,49 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Dwnl</title>
   <link rel="stylesheet" href="popup.css">
   <script type="module" src="src/popup.js"></script>
 </head>
 <body>
   <main id="app">
-    <header class="header">
-      <div class="brand"><img class="brand-icon" src="assets/icons/icon-128.png" width="35" height="35" alt="" aria-hidden="true"><span>Dwnl<span class="brand-dot">.</span></span></div>
-      <span id="connection" class="connection">Conectando</span>
+    <header class="topbar">
+      <h1 class="brand"><svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 1.5h5.2l2.8 2.8v5.2h3.2L12 17.2 4.3 9.5h4.2z"/><path class="brand-tray" d="M3.5 14.5v4.2a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-4.2"/></svg><span>Dwnl</span></h1>
+      <span id="connection" class="connection" role="status">Conectando…</span>
     </header>
-    <section class="intro"><p class="eyebrow">SEU ARQUIVO, NO SEU COMPUTADOR</p><h1>Do link para a sua pasta.</h1><p>Escolha o vídeo ou leve só o áudio.</p></section>
-    <section id="onboarding" class="notice" hidden>
+    <section id="onboarding" class="card onboarding" hidden>
       <h2 id="onboarding-title">Conecte o auxiliar Dwnl</h2>
       <p id="onboarding-detail"></p>
-      <p id="local-installer">Abra o instalador fornecido no pacote local do Dwnl. Depois, tente conectar novamente.</p>
-      <button id="install" type="button" hidden>Baixar instalador do Dwnl</button>
-      <button id="reconnect" type="button" class="secondary">Tentar conectar</button>
+      <p id="local-installer" class="hint">Abra o instalador fornecido no pacote local do Dwnl. Depois, tente conectar novamente.</p>
+      <div class="actions"><button id="install" type="button" class="button primary" hidden>Baixar instalador do Dwnl</button><button id="reconnect" type="button" class="button">Tentar conectar</button></div>
     </section>
-    <div id="network-notice" class="notice" role="status" hidden></div>
-    <div id="error" class="notice error" role="alert" hidden></div>
-    <form id="source-form" class="source-card">
-      <div class="section-label"><span class="step">01</span><label for="url">Link do conteúdo</label></div>
-      <input id="url" name="url" type="url" placeholder="Cole um link público aqui" autocomplete="off" spellcheck="false" required>
-      <div class="source-actions"><button id="current-tab" type="button" class="secondary">↗ Usar aba atual</button><button id="analyze" type="submit" class="primary">Analisar <span aria-hidden="true">→</span></button></div>
-      <p class="hint">YouTube · Instagram · TikTok · X <span>Suporte sujeito ao conteúdo.</span></p>
+    <p id="network-notice" class="notice" role="status" hidden></p>
+    <p id="error" class="notice error" role="alert" hidden></p>
+    <form id="source-form" class="card source">
+      <label for="url" class="visually-hidden">Link do conteúdo</label>
+      <div class="url-field"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.5-1.5"/></svg><input id="url" name="url" type="url" placeholder="Cole um link público" autocomplete="off" spellcheck="false" required><button id="current-tab" type="button" class="field-button" title="Usar o link da aba atual">Usar aba</button></div>
+      <button id="analyze" type="submit" class="button primary">Analisar</button>
+      <p class="hint">YouTube, Instagram, TikTok e X. O suporte varia conforme o conteúdo.</p>
     </form>
-    <section id="selection" class="selection-card" hidden>
-      <div class="section-label"><span class="step">02</span><h2>Escolha sua saída</h2></div>
-      <label id="item-label" for="item">Vídeo do post</label><select id="item" aria-labelledby="item-label"></select>
-      <h3 id="media-title"></h3><p id="media-detail" class="muted"></p>
+    <section id="selection" class="card selection" aria-label="Opções do download" hidden>
+      <div id="item-field" class="field"><label id="item-label" for="item">Vídeo do post</label><div class="select"><select id="item"></select></div></div>
+      <h2 id="media-title"></h2><p id="media-detail" class="hint"></p>
       <div class="mode-switch" role="group" aria-label="Tipo de arquivo"><button id="mode-video" type="button" aria-pressed="true">Vídeo</button><button id="mode-mp3" type="button" aria-pressed="false">Áudio MP3</button></div>
       <p id="mp3-reason" class="hint" hidden></p>
-      <div id="video-settings"><label for="quality">Qualidade disponível</label><select id="quality"></select><p id="quality-note" class="hint"></p><button id="more-formats" type="button" class="text-button" hidden>Ver mais formatos</button></div>
-      <div id="mp3-settings" hidden><label for="bitrate">Taxa de saída MP3</label><select id="bitrate"><option value="128">128 kbps</option><option value="192" selected>192 kbps · padrão</option><option value="320">320 kbps</option></select><p class="hint">A taxa de saída não recupera fidelidade ausente na fonte.</p></div>
-      <div class="destination"><div><span class="eyebrow">SALVAR EM</span><p id="destination">Downloads/Dwnl</p></div><button id="choose-destination" type="button" class="text-button">Alterar pasta</button></div>
-      <button id="start" type="button" class="primary start" disabled>Salvar vídeo <span aria-hidden="true">↧</span></button>
+      <div id="video-settings" class="field"><label for="quality">Qualidade disponível</label><div class="select"><select id="quality"></select></div><p id="quality-note" class="hint"></p><button id="more-formats" type="button" class="link-button" hidden>Ver mais formatos</button></div>
+      <div id="mp3-settings" class="field" hidden><label for="bitrate">Taxa de saída MP3</label><div class="select"><select id="bitrate"><option value="128">128 kbps</option><option value="192" selected>192 kbps · padrão</option><option value="320">320 kbps</option></select></div><p class="hint">A taxa de saída não recupera fidelidade ausente na fonte.</p></div>
+      <div class="destination"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Salvar em</span><span id="destination" class="destination-label">Downloads/Dwnl</span><button id="choose-destination" type="button" class="link-button">Alterar pasta</button></div>
+      <button id="start" type="button" class="button primary wide" disabled>Salvar vídeo</button>
     </section>
-    <section id="job" class="job-card" aria-live="polite" hidden>
+    <section id="job" class="card job" aria-live="polite" hidden>
       <div class="job-heading"><h2 id="job-state"></h2><span id="job-percent"></span></div>
       <progress id="job-progress" max="100" aria-label="Progresso da etapa"></progress>
-      <p id="job-detail" class="muted"></p><p id="completed-file" class="completed-file" hidden></p>
-      <button id="cancel" type="button" class="secondary">Cancelar tarefa</button><button id="verify-job" type="button" class="text-button" hidden>Verificar tarefa</button>
+      <p id="job-detail" class="hint"></p><p id="completed-file" class="completed-file" hidden></p>
+      <div class="actions"><button id="cancel" type="button" class="button">Cancelar tarefa</button><button id="verify-job" type="button" class="link-button" hidden>Verificar tarefa</button></div>
     </section>
-    <details id="history"><summary>Histórico local <span id="history-count">0</span></summary><ol id="history-list"></ol><button id="clear-history" type="button" class="text-button">Limpar histórico</button><p class="hint">Limpar o histórico preserva os arquivos salvos.</p></details>
-    <footer><p>As URLs são tratadas pelo auxiliar local, sem uma conta Dwnl.</p><p>Fechar este painel mantém a tarefa. Fechar o Chrome ou perder a conexão pode interrompê-la.</p></footer>
+    <details id="history"><summary>Histórico local <span id="history-count">0</span></summary><ol id="history-list"></ol><button id="clear-history" type="button" class="link-button">Limpar histórico</button><p class="hint">Limpar o histórico preserva os arquivos salvos.</p></details>
+    <footer class="hint"><p>As URLs são tratadas pelo auxiliar local, sem uma conta Dwnl.</p><p>Fechar este painel mantém a tarefa. Fechar o Chrome ou perder a conexão pode interrompê-la.</p></footer>
   </main>
 </body>
 </html>

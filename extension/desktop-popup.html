@@ -1,18 +1,18 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dwnl — download rápido</title><link rel="stylesheet" href="desktop-popup.css"></head>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Dwnl — download rápido</title><link rel="stylesheet" href="desktop-popup.css"></head>
 <body><main>
-<header><a class="brand" href="#" id="brand" aria-label="Abrir aplicativo Dwnl"><span class="mark" aria-hidden="true">↓</span>Dwnl<span class="badge">DESKTOP</span></a><button id="open-app" class="quiet">Abrir app ↗</button></header>
-<section class="connection"><span id="status" role="status">Conectando ao app…</span><button id="reconnect" class="quiet" hidden>Reconectar</button></section>
-<form id="analyze-form"><label for="url">O que vamos baixar?</label><div class="url-row"><input id="url" type="url" placeholder="Cole o link do vídeo" required autocomplete="off"><button id="current-tab" type="button" title="Usar link da aba atual">Usar aba</button></div><button id="analyze" class="primary wide" type="submit" disabled>Analisar vídeo</button></form>
-<p id="feedback" role="status" aria-live="polite" hidden></p>
-<section id="selection" hidden aria-label="Opções do download">
-<h1 id="media-title"></h1><label for="item">Vídeo encontrado</label><select id="item"></select>
-<div class="selection-row"><div><label for="mode">Formato</label><select id="mode"><option value="video">Vídeo</option><option value="mp3">Áudio MP3</option></select></div><div><label for="quality">Qualidade</label><select id="quality"></select></div></div>
-<button id="more-formats" class="quiet" hidden>Mais qualidades</button>
-<p id="media-note" class="muted"></p>
-<div class="destination"><span id="destination" title=""></span><button id="choose-destination" class="quiet">Alterar pasta</button></div>
-<button id="enqueue" class="primary wide">Adicionar à fila</button></section>
-<button id="retry-enqueue" class="primary wide" hidden>Confirmar envio pendente</button>
-<section id="queue-section"><div class="section-heading"><h2>Fila do aplicativo</h2><button id="continue" class="quiet" hidden>Continuar fila</button></div><p id="queue" class="muted">Aguardando conexão.</p></section>
-<footer>O app continua baixando quando você fecha o navegador.</footer>
+<header class="topbar"><a class="brand" href="#" id="brand" aria-label="Abrir aplicativo Dwnl"><svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 1.5h5.2l2.8 2.8v5.2h3.2L12 17.2 4.3 9.5h4.2z"/><path class="brand-tray" d="M3.5 14.5v4.2a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-4.2"/></svg><span>Dwnl</span></a><button id="open-app" class="link-button" type="button">Abrir app</button></header>
+<section class="connection"><span id="status" role="status">Conectando ao app…</span><button id="reconnect" class="link-button" type="button" hidden>Reconectar</button></section>
+<form id="analyze-form" class="card url-row"><label for="url" class="visually-hidden">Link do vídeo</label><div class="url-field"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.5-1.5"/></svg><input id="url" type="url" placeholder="Cole o link do vídeo" required autocomplete="off" spellcheck="false"><button id="current-tab" class="field-button" type="button" title="Usar o link da aba atual">Usar aba</button></div><button id="analyze" class="button primary" type="submit" disabled>Buscar</button></form>
+<p id="feedback" class="notice" role="status" aria-live="polite" hidden></p>
+<section id="selection" class="card selection" hidden aria-label="Opções do download">
+<h1 id="media-title"></h1>
+<div id="item-field" class="field" hidden><label for="item">Vídeo encontrado</label><div class="select"><select id="item"></select></div></div>
+<div class="selection-row"><div class="field"><label for="mode">Formato</label><div class="select"><select id="mode"><option value="video">Vídeo</option><option value="mp3">Áudio MP3</option></select></div></div><div class="field"><label for="quality">Qualidade</label><div class="select"><select id="quality"></select></div></div></div>
+<p class="selection-footer"><span id="media-note" class="hint"></span><button id="more-formats" class="link-button" type="button" hidden>Mostrar mais qualidades</button></p>
+<div class="destination"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Salvar em</span><span id="destination" class="destination-label" title=""></span><button id="choose-destination" class="link-button" type="button">Alterar</button></div>
+<button id="enqueue" class="button primary wide" type="button">Adicionar à fila</button></section>
+<button id="retry-enqueue" class="button primary wide" type="button" hidden>Confirmar envio pendente</button>
+<section id="queue-section" class="queue" aria-labelledby="queue-title"><div class="section-heading"><h2 id="queue-title">Fila do aplicativo</h2><button id="continue" class="link-button" type="button" hidden>Continuar fila</button></div><div class="card queue-card"><p id="queue">Aguardando conexão.</p><div id="queue-progress" class="progress" role="progressbar" aria-labelledby="queue" aria-valuemin="0" aria-valuemax="100" hidden><div class="progress-fill"></div></div></div></section>
+<footer class="hint">O app continua baixando quando você fecha o navegador.</footer>
 </main><script type="module" src="src/desktop-popup.js"></script></body></html>

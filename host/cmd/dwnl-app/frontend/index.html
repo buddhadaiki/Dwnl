@@ -126,6 +126,23 @@
     <div class="dialog-actions"><button id="archive-cancel" class="button" type="button" autofocus>Voltar</button><button id="archive-confirm" class="button primary" type="button">Limpar histórico</button></div>
   </dialog>
 
+  <dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description">
+    <h2 id="remove-title">Apagar do histórico?</h2>
+    <p id="remove-description" class="hint"></p>
+    <p id="remove-error" class="notice error" role="alert" hidden></p>
+    <div class="dialog-actions"><button id="remove-confirm" class="button danger" type="button">Apagar do histórico</button><button id="remove-cancel" class="button" type="button" autofocus>Cancelar</button></div>
+  </dialog>
+
+  <dialog id="rename-dialog" aria-labelledby="rename-title" aria-describedby="rename-hint">
+    <form id="rename-form" novalidate>
+      <h2 id="rename-title">Renomear vídeo</h2>
+      <div class="field"><label for="rename-input">Nome</label><input id="rename-input" class="text-field" type="text" maxlength="120" autocomplete="off" spellcheck="false"></div>
+      <p id="rename-hint" class="hint">O arquivo na pasta também muda de nome.</p>
+      <p id="rename-error" class="notice error" role="alert" hidden></p>
+      <div class="dialog-actions"><button id="rename-cancel" class="button" type="button">Cancelar</button><button id="rename-save" class="button primary" type="submit">Salvar</button></div>
+    </form>
+  </dialog>
+
   <script type="module" src="./app.js"></script>
 </body>
 </html>

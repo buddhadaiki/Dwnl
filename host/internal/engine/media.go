@@ -549,7 +549,9 @@ func fileError(err error) error {
 	}
 	return protocolError(contracts.DestinationError, "The media file could not be saved in the destination folder.")
 }
-func sanitizeTitle(title string) string {
+
+// SanitizeTitle turns a media title into a Windows file name without extension.
+func SanitizeTitle(title string) string {
 	var b strings.Builder
 	for _, r := range title {
 		if unicode.IsControl(r) || strings.ContainsRune(`<>:"/\|?*`, r) {
@@ -639,7 +641,7 @@ func finalize(ctx context.Context, source, destination, title, format, jobID str
 	if err := validateLocalPath(destination, true); err != nil {
 		return empty, fileError(err)
 	}
-	title = sanitizeTitle(title)
+	title = SanitizeTitle(title)
 	for suffix := 0; suffix < 10000; suffix++ {
 		filename := title + "." + format
 		if suffix > 0 {
