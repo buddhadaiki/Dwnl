@@ -1,7 +1,7 @@
-import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyCompleted, appendChoices, isVideoURL, pollDelay, showExtensionCard} from './model.mjs';
+import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyCompleted, appendChoices, isVideoURL, pollDelay, showExtensionCard, retryLabel} from './model.mjs';
 
 const $ = id => document.getElementById(id);
-const state = {snapshot:null, analysis:null, item:null, view:'queue', analyzing:false, enqueuing:false, loadingFormats:false, requestId:null, requestKey:null, failures:0, pollTimer:null, refreshing:false, selectionVersion:0, exiting:false, archiving:false, seen:null, toastTask:null, toastTimer:null, pastedWhileAnalyzing:false, extensionDismissed:false, copyTimer:null};
+const state = {snapshot:null, analysis:null, item:null, view:'queue', analyzing:false, enqueuing:false, loadingFormats:false, requestId:null, requestKey:null, failures:0, pollTimer:null, refreshing:false, selectionVersion:0, exiting:false, archiving:false, seen:null, toastTask:null, toastTimer:null, pastedWhileAnalyzing:false, analyzeWhenReady:false, retryMode:null, extensionDismissed:false, copyTimer:null, removeId:null, removing:false, renameId:null, renaming:false};
 // Remembered per WebView profile; the card is a nudge, Settings always keep the steps.
 const extensionDismissKey = 'dwnl.extensionCardDismissed';
 try { state.extensionDismissed = window.localStorage.getItem(extensionDismissKey) === '1'; } catch {}
@@ -13,6 +13,9 @@ const icons = {
   failed:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/>',
   canceled:'<circle cx="12" cy="12" r="9"/><path d="M8.5 15.5l7-7"/>',
   folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  play:'<path d="M8 5.8v12.4a.8.8 0 0 0 1.2.7l9.6-6.2a.8.8 0 0 0 0-1.4L9.2 5.1A.8.8 0 0 0 8 5.8z"/>',
+  pencil:'<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/><path d="m14 8 3 3"/>',
+  close:'<path d="M7 7l10 10M17 7 7 17"/>',
 };
 const icon = name => '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + icons[name] + '</svg>';
 
@@ -118,15 +121,29 @@ function renderReadiness() {
   const canAnalyze = Boolean(snapshot) && !preparing && state.failures === 0 && snapshot.capabilities?.networkAccess;
   $('analyze-button').disabled = state.analyzing || !canAnalyze;
   $('analyze-button').textContent = state.analyzing ? 'Buscando…' : 'Buscar';
+  $('source-hint').textContent = preparing ? 'Preparando os componentes de download. Pode colar o link: a busca começa assim que terminar.' : 'YouTube, TikTok, Instagram e X. Ao colar, o vídeo é buscado na hora.';
+  // A link pasted while the app was preparing keeps the paste promise once it is ready.
+  if (canAnalyze && state.analyzeWhenReady && !state.analyzing) { state.analyzeWhenReady = false; queueMicrotask(analyzeIfLink); }
   const dependencies = snapshot?.dependencies ?? [];
   $('dependency-list').innerHTML = dependencies.length ? dependencies.map(dep => '<li><span>' + escapeHTML(dep.name) + '</span><span>' + escapeHTML(dep.available ? dep.version || 'Disponível' : 'Indisponível') + '</span></li>').join('') : '<li>Aguardando verificação dos componentes.</li>';
   updateSelection();
 }
 
+// Finished rows get icons whose tip names the action; unfinished rows keep a worded Cancel.
 function taskActions(task) {
-  if (task.state === 'completed' && task.completedFile) return [['openFolder', icon('folder') + 'Mostrar na pasta'], ['openFile', 'Abrir']];
-  if (!terminalStates.has(task.state)) return [['cancel', 'Cancelar']];
-  return [];
+  if (!terminalStates.has(task.state)) return [{name:'cancel', label:'Cancelar'}];
+  const remove = {name:'remove', icon:'close', tip:'Apagar do histórico'};
+  if (task.state !== 'completed' || !task.completedFile) {
+    const retry = retryLabel(task);
+    return retry ? [{name:'retry', label:retry}, remove] : [remove];
+  }
+  const media = task.mode === 'mp3' ? 'o áudio' : 'o vídeo';
+  return [{name:'openFile', icon:'play', tip:'Abrir ' + media}, {name:'openFolder', icon:'folder', tip:'Mostrar na pasta'}, {name:'rename', icon:'pencil', tip:'Renomear ' + media}, remove];
+}
+function actionButton(task, {name, label, icon: iconName, tip}) {
+  const attributes = ' data-action="' + name + '" data-id="' + escapeHTML(task.id) + '"' + (task.state === 'canceling' ? ' disabled' : '');
+  if (!iconName) return '<button type="button"' + attributes + '>' + escapeHTML(label) + '</button>';
+  return '<button type="button" class="icon-only"' + attributes + ' data-tip="' + escapeHTML(tip) + '" aria-label="' + escapeHTML(tip) + '">' + icon(iconName) + '</button>';
 }
 
 // Rows are updated in place, so progress bars animate between polls and
@@ -158,10 +175,10 @@ function updateRow(row, task) {
   error.textContent = task.error ? errorMessage(task.error) : '';
   error.hidden = !task.error;
   const actions = taskActions(task);
-  const actionKey = actions.map(([name]) => name).join() + (task.state === 'canceling' ? ':busy' : '');
+  const actionKey = actions.map(a => a.name + ':' + (a.tip ?? '')).join() + (task.state === 'canceling' ? ':busy' : '');
   if (row.dataset.actions !== actionKey) {
     row.dataset.actions = actionKey;
-    row.querySelector('.task-actions').innerHTML = actions.map(([name, label]) => '<button type="button" data-action="' + name + '" data-id="' + escapeHTML(task.id) + '"' + (task.state === 'canceling' ? ' disabled' : '') + '>' + label + '</button>').join('');
+    row.querySelector('.task-actions').innerHTML = actions.map(a => actionButton(task, a)).join('');
   }
 }
 
@@ -245,6 +262,8 @@ function currentChoice() {
 
 function updateSelection() {
   $('selection').hidden = !state.analysis || !state.item;
+  // Once a video is found, Baixar is the one primary action; Buscar steps back.
+  $('analyze-button').classList.toggle('primary', !state.item);
   if (!state.item) return;
   const mp3 = mode() === 'mp3';
   $('quality-field').hidden = mp3;
@@ -268,7 +287,9 @@ function selectItem() {
   $('media-title').textContent = state.item.title || 'Vídeo sem título';
   $('media-meta').textContent = [clock(state.item.durationSeconds), new URL(state.analysis.sourceUrl).hostname.replace(/^www\./, '')].filter(Boolean).join(' · ');
   renderChoices(defaultChoice(state.item.videoChoices));
-  setMode(state.snapshot?.capabilities?.video && state.item.videoChoices.length ? 'video' : 'mp3');
+  const videoAvailable = state.snapshot?.capabilities?.video && state.item.videoChoices.length;
+  const mp3Available = state.snapshot?.capabilities?.mp3 && (state.item.hasAudio || state.item.audioUnknown);
+  setMode(state.retryMode === 'mp3' && mp3Available || !videoAvailable ? 'mp3' : 'video');
   updateSelection();
 }
 
@@ -311,6 +332,7 @@ async function analyze(event) {
 function analyzeIfLink() {
   if (!isVideoURL($('source-url').value.trim())) return;
   if (state.analyzing) state.pastedWhileAnalyzing = true;
+  else if ($('analyze-button').disabled) state.analyzeWhenReady = true;
   else void analyze();
 }
 
@@ -410,6 +432,8 @@ for (const input of document.querySelectorAll('input[name="mode"]')) input.addEv
 $('quality-select').addEventListener('change',updateSelection);
 $('source-url').addEventListener('input',() => {
   state.selectionVersion++;
+  state.analyzeWhenReady = false;
+  state.retryMode = null;
   if (state.analysis) { state.analysis = null; state.item = null; updateSelection(); notice('analysis-status',null); }
 });
 $('source-url').addEventListener('paste',() => setTimeout(analyzeIfLink,0));
@@ -421,7 +445,12 @@ $('destination-button').addEventListener('click',() => action($('destination-but
 $('continue-button').addEventListener('click',() => action($('continue-button'),'continue'));
 for (const list of ['task-list','recent-list']) $(list).addEventListener('click',event => {
   const button = event.target.closest('button[data-action]');
-  if (button) action(button,button.dataset.action,{id:button.dataset.id});
+  if (!button) return;
+  const {action: name, id} = button.dataset;
+  if (name === 'remove') openRemove(id);
+  else if (name === 'rename') openRename(id);
+  else if (name === 'retry') retryTask(id);
+  else action(button,name,{id});
 });
 $('toast-folder').addEventListener('click',() => { const id = state.toastTask; hideToast(); if (id) action($('toast-folder'),'openFolder',{id}); });
 $('toast-close').addEventListener('click',hideToast);
@@ -500,6 +529,90 @@ $('archive-confirm').addEventListener('click', async () => {
     $('archive-cancel').disabled = false;
     $('archive-confirm').textContent = 'Limpar histórico';
     renderTasks();
+  }
+});
+
+const findTask = id => state.snapshot?.tasks?.find(task => task.id === id);
+
+// A failed or canceled download starts over in the composer: a fresh analysis
+// shows the qualities available now, and an MP3 stays an MP3 at its bitrate.
+function retryTask(id) {
+  const task = findTask(id);
+  if (!retryLabel(task)) return;
+  showView('queue');
+  const input = $('source-url');
+  input.value = task.url;
+  input.dispatchEvent(new window.Event('input'));
+  state.retryMode = task.mode;
+  if (task.mode === 'mp3' && task.bitrateKbps) $('bitrate-select').value = String(task.bitrateKbps);
+  window.scrollTo?.({top:0, behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+  input.focus({preventScroll:true});
+  analyzeIfLink();
+}
+
+function openRemove(id) {
+  const task = findTask(id);
+  if (!task) return;
+  state.removeId = id;
+  $('remove-description').textContent = (task.title ? '“' + task.title + '” sai desta lista.' : 'O registro sai desta lista.') + (task.state === 'completed' ? ' O arquivo continua na pasta.' : '');
+  notice('remove-error',null);
+  $('remove-dialog').showModal();
+}
+$('remove-cancel').addEventListener('click', () => { if (!state.removing) $('remove-dialog').close(); });
+$('remove-dialog').addEventListener('cancel', event => { if (state.removing) event.preventDefault(); });
+$('remove-confirm').addEventListener('click', async () => {
+  if (state.removing || !state.removeId) return;
+  state.removing = true;
+  $('remove-confirm').disabled = true;
+  $('remove-cancel').disabled = true;
+  $('remove-confirm').textContent = 'Apagando…';
+  notice('remove-error',null);
+  try {
+    const result = await call('archiveHistory',{id:state.removeId});
+    if (result?.archived !== 1) throw new Error('Não foi possível confirmar. Confira a lista antes de repetir.');
+    $('remove-dialog').close();
+    await refresh();
+  } catch (error) { notice('remove-error',error); }
+  finally {
+    state.removing = false;
+    $('remove-confirm').disabled = false;
+    $('remove-cancel').disabled = false;
+    $('remove-confirm').textContent = 'Apagar do histórico';
+  }
+});
+
+function openRename(id) {
+  const task = findTask(id);
+  if (!task) return;
+  state.renameId = id;
+  $('rename-title').textContent = task.mode === 'mp3' ? 'Renomear áudio' : 'Renomear vídeo';
+  $('rename-input').value = task.title || '';
+  notice('rename-error',null);
+  $('rename-dialog').showModal();
+  $('rename-input').select();
+}
+$('rename-cancel').addEventListener('click', () => { if (!state.renaming) $('rename-dialog').close(); });
+$('rename-dialog').addEventListener('cancel', event => { if (state.renaming) event.preventDefault(); });
+$('rename-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (state.renaming || !state.renameId) return;
+  const title = $('rename-input').value.trim();
+  if (!title) { notice('rename-error','Digite um nome.'); $('rename-input').focus(); return; }
+  state.renaming = true;
+  $('rename-save').disabled = true;
+  $('rename-cancel').disabled = true;
+  $('rename-save').textContent = 'Salvando…';
+  notice('rename-error',null);
+  try {
+    await call('renameTask',{id:state.renameId,title});
+    $('rename-dialog').close();
+    await refresh();
+  } catch (error) { notice('rename-error',error); $('rename-input').focus(); }
+  finally {
+    state.renaming = false;
+    $('rename-save').disabled = false;
+    $('rename-cancel').disabled = false;
+    $('rename-save').textContent = 'Salvar';
   }
 });
 

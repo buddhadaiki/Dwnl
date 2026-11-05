@@ -91,6 +91,12 @@ export function pollDelay(snapshot, failures = 0, waitingForExtension = false) {
   return waitingForExtension ? 2000 : 8000;
 }
 
+// A failed or canceled download can start over from its link; '' when it cannot.
+export function retryLabel(task) {
+  if (!isVideoURL(task?.url ?? '')) return '';
+  return {failed:'Tentar de novo', canceled:'Baixar de novo'}[task.state] ?? '';
+}
+
 // The setup ships the extension; the app reports it only when it is installed.
 export function showExtensionCard(snapshot, dismissed) {
   return Boolean(snapshot?.extension && !snapshot.extension.connected && !dismissed);

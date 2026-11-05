@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {Window} from 'happy-dom';
-import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, choiceLabel, qualityName, newlyCompleted, clock, showExtensionCard} from './model.mjs';
+import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, choiceLabel, qualityName, newlyCompleted, clock, showExtensionCard, retryLabel} from './model.mjs';
 
 test('quality selection treats a portrait Short as 1080p, without selecting 4K', () => {
   const choices = [
@@ -247,6 +247,120 @@ test('dismissing the Chrome card keeps it closed on the next start', async () =>
     assert.equal(window.localStorage.getItem('dwnl.extensionCardDismissed'),'1');
     // Settings still offer the steps, so the card is never the only way in.
     assert.equal($('extension-setting').hidden,false);
+  } finally {
+    window.dispatchEvent(new window.Event('beforeunload')); await window.happyDOM.abort();
+    delete globalThis.document;delete globalThis.window;
+  }
+});
+
+test('history rows describe their buttons, confirm removal and rename the video', async () => {
+  const window = new Window({url:'http://localhost/',settings:{disableJavaScriptFileLoading:true,disableJavaScriptEvaluation:true}});
+  window.document.write(await readFile(new URL('./index.html',import.meta.url),'utf8'));
+  globalThis.window = window; globalThis.document = window.document;
+  const done = {id:'done',title:'Aula 1',url:'https://youtube.com/watch?v=1',state:'completed',mode:'video',completedFile:{path:'C:\\Downloads\\Aula 1.mp4',format:'mp4',sizeBytes:2048}};
+  const failed = {id:'failed',title:'Falhou',url:'https://youtube.com/watch?v=2',state:'failed',mode:'video',error:'Sem rede'};
+  const snapshot = {readiness:'ready',capabilities:{video:true,mp3:true,networkAccess:true},destination:{destinationId:'d'},tasks:[failed,done]};
+  const calls = [];
+  window.go={main:{App:{Call:async(method,serialized) => {
+    const payload = JSON.parse(serialized);
+    if (method === 'snapshot') return snapshot;
+    calls.push({method,payload});
+    if (method === 'renameTask' && payload.title === 'Repetido') throw new Error('Já existe um arquivo com esse nome na pasta. Escolha outro nome.');
+    if (method === 'renameTask') { done.title = payload.title; return done; }
+    if (method === 'archiveHistory') { snapshot.tasks = snapshot.tasks.filter(task => task.id !== payload.id); return {archived:1}; }
+    throw new Error('Unexpected method '+method);
+  }}}};
+  const settle=async()=>{for(let i=0;i<5;i++)await new Promise(resolve=>setTimeout(resolve,0));};
+  try {
+    await import('./app.js?history='+Date.now()); await settle();
+    const $=id=>window.document.getElementById(id);
+    $('nav-history').click();
+    const row = id => $('task-list').querySelector('article[data-id="'+id+'"]');
+    const buttons = id => [...row(id).querySelectorAll('.task-actions button')];
+    // Every icon names its action for the hover tip and for screen readers.
+    assert.deepEqual(buttons('done').map(b => [b.dataset.action, b.dataset.tip, b.getAttribute('aria-label')]), [
+      ['openFile','Abrir o vídeo','Abrir o vídeo'],
+      ['openFolder','Mostrar na pasta','Mostrar na pasta'],
+      ['rename','Renomear o vídeo','Renomear o vídeo'],
+      ['remove','Apagar do histórico','Apagar do histórico'],
+    ]);
+    assert.deepEqual(buttons('failed').map(b => b.dataset.action), ['retry','remove']);
+
+    buttons('done')[3].click(); await settle();
+    assert.equal($('remove-dialog').open,true);
+    assert.match($('remove-description').textContent,/Aula 1/);
+    assert.match($('remove-description').textContent,/continua na pasta/);
+    assert.equal($('remove-confirm').textContent,'Apagar do histórico');
+    assert.equal($('remove-cancel').textContent,'Cancelar');
+    $('remove-cancel').click(); await settle();
+    assert.equal($('remove-dialog').open,false);
+    assert.equal(calls.length,0);
+
+    buttons('done')[2].click(); await settle();
+    assert.equal($('rename-dialog').open,true);
+    assert.equal($('rename-input').value,'Aula 1');
+    $('rename-input').value = 'Repetido';
+    $('rename-form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true})); await settle();
+    assert.equal($('rename-dialog').open,true);
+    assert.match($('rename-error').textContent,/Já existe/);
+    $('rename-input').value = '  Aula 1 revisada  ';
+    $('rename-form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true})); await settle();
+    assert.deepEqual(calls.at(-1),{method:'renameTask',payload:{id:'done',title:'Aula 1 revisada'}});
+    assert.equal($('rename-dialog').open,false);
+    assert.match(row('done').textContent,/Aula 1 revisada/);
+
+    buttons('failed')[1].click(); await settle();
+    assert.doesNotMatch($('remove-description').textContent,/continua na pasta/);
+    $('remove-confirm').click(); await settle();
+    assert.deepEqual(calls.at(-1),{method:'archiveHistory',payload:{id:'failed'}});
+    assert.equal($('remove-dialog').open,false);
+    assert.equal(row('failed'),null);
+  } finally {
+    window.dispatchEvent(new window.Event('beforeunload')); await window.happyDOM.abort();
+    delete globalThis.document;delete globalThis.window;
+  }
+});
+
+test('only failed or canceled downloads with a link offer to download again', () => {
+  const url = 'https://youtube.com/watch?v=1';
+  assert.equal(retryLabel({state:'failed',url}),'Tentar de novo');
+  assert.equal(retryLabel({state:'canceled',url}),'Baixar de novo');
+  for (const state of ['completed','queued','downloading','interrupted']) assert.equal(retryLabel({state,url}),'');
+  assert.equal(retryLabel({state:'failed',url:''}),'');
+  assert.equal(retryLabel({state:'failed',url:'file:///C:/x.mp4'}),'');
+  assert.equal(retryLabel(undefined),'');
+});
+
+test('trying a failed MP3 again brings its link back and keeps the format', async () => {
+  const window = new Window({url:'http://localhost/',settings:{disableJavaScriptFileLoading:true,disableJavaScriptEvaluation:true}});
+  window.document.write(await readFile(new URL('./index.html',import.meta.url),'utf8'));
+  globalThis.window = window; globalThis.document = window.document;
+  const failed = {id:'failed',title:'Podcast',url:'https://youtube.com/watch?v=pod',state:'failed',mode:'mp3',bitrateKbps:320,error:'Sem rede'};
+  const canceled = {id:'canceled',title:'Clipe',url:'https://x.com/a/status/1',state:'canceled',mode:'video'};
+  const snapshot = {readiness:'ready',capabilities:{video:true,mp3:true,networkAccess:true},destination:{destinationId:'d'},tasks:[canceled,failed]};
+  const analyzed = [];
+  window.go={main:{App:{Call:async(method,serialized) => {
+    if (method === 'snapshot') return snapshot;
+    if (method === 'analyze') { const {url} = JSON.parse(serialized); analyzed.push(url); return {analysisId:'a',sourceUrl:url,items:[{itemId:'i',title:'Podcast',hasAudio:true,videoChoices:[{optionId:'v',width:1280,height:720,hasAudio:true}]}]}; }
+    throw new Error('Unexpected method '+method);
+  }}}};
+  const settle=async()=>{for(let i=0;i<5;i++)await new Promise(resolve=>setTimeout(resolve,0));};
+  try {
+    await import('./app.js?retry='+Date.now()); await settle();
+    const $=id=>window.document.getElementById(id);
+    $('nav-history').click();
+    const retry = id => $('task-list').querySelector('article[data-id="'+id+'"] button[data-action="retry"]');
+    assert.equal(retry('canceled').textContent,'Baixar de novo');
+    assert.equal(retry('failed').textContent,'Tentar de novo');
+    retry('failed').click(); await settle();
+    // Back on Downloads with the link in the field and a fresh analysis.
+    assert.equal($('composer').hidden,false);
+    assert.equal($('nav-queue').getAttribute('aria-current'),'page');
+    assert.equal($('source-url').value,failed.url);
+    assert.deepEqual(analyzed,[failed.url]);
+    assert.equal($('selection').hidden,false);
+    assert.equal($('mode-mp3').checked,true);
+    assert.equal($('bitrate-select').value,'320');
   } finally {
     window.dispatchEvent(new window.Event('beforeunload')); await window.happyDOM.abort();
     delete globalThis.document;delete globalThis.window;

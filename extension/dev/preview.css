@@ -4,5 +4,5 @@ body { width: 100%; max-height: none; min-height: 100vh; background: #e8ece3; }
 #preview-toolbar label { display: inline; margin: 0 0 0 auto; }
 #preview-toolbar select { width: 225px; padding: 9px; background: #fff; }
 #preview-toolbar button { padding: 9px 12px; background: #d7f484; }
-#preview-popup { width: 420px; max-width: 100%; margin: 30px auto; background: #f5f6f1; border-radius: 15px; box-shadow: 0 12px 55px #253b2420; overflow: hidden; }
+#preview-popup { width: 390px; max-width: 100%; margin: 30px auto; background: var(--bg); border-radius: 10px; box-shadow: 0 8px 32px rgb(0 0 0 / .16); overflow: hidden; }
 #preview-popup main { min-height: 500px; }

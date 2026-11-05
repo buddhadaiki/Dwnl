@@ -1,7 +1,7 @@
 import { browserAPI, type BrowserAPI } from './browser.js';
 import { DESKTOP_PORT, DesktopClient, DesktopError, bestDesktopVideo, desktopRequest, type DesktopSnapshot, type EnqueuePayload } from './desktop-client.js';
 import type { Analysis, MediaItem, MP3Bitrate, VideoChoice } from './protocol.js';
-import { qualityName } from './quality.js';
+import { qualityName, sizeName } from './quality.js';
 
 const PENDING_KEY = 'dwnl-pending-enqueue-v2';
 export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => void {
@@ -30,15 +30,26 @@ export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => voi
     element<HTMLButtonElement>('retry-enqueue').disabled = busy || !ready();
     element<HTMLButtonElement>('reconnect').hidden = connected;
     element<HTMLButtonElement>('reconnect').disabled = busy;
+    // Once a video is found, "Adicionar à fila" is the one primary action.
+    element('analyze').classList.toggle('primary', !analysis);
   }
   function renderSnapshot(): void {
-    element('status').textContent = connected ? snapshot?.readiness === 'preparing' ? 'App conectado · preparando ferramentas…' : snapshot?.readiness === 'degraded' ? 'App conectado · requer atenção' : 'App conectado · pronto' : 'Aplicativo desconectado';
+    const status = element('status');
+    status.textContent = connected ? snapshot?.readiness === 'preparing' ? 'App conectado · preparando ferramentas…' : snapshot?.readiness === 'degraded' ? 'App conectado · requer atenção' : 'App conectado · pronto' : 'Aplicativo desconectado';
+    status.dataset.state = connected ? snapshot?.readiness ?? 'preparing' : 'disconnected';
     if (snapshot) {
       element('destination').textContent = snapshot.destination.label;
       element('destination').title = snapshot.destination.label;
       const tasks = snapshot.tasks, active = tasks.find(t => ['analyzing', 'downloading', 'processing', 'muxing', 'converting', 'saving', 'canceling'].includes(t.state));
       const queued = tasks.filter(t => ['queued', 'interrupted'].includes(t.state)).length;
-      element('queue').textContent = active ? active.title + (active.progress?.percent !== undefined ? ' · ' + Math.round(active.progress.percent) + '%' : ' · em andamento') + (queued ? ' · ' + queued + ' na fila' : '') : snapshot.paused && queued ? queued + ' download(s) aguardando Continuar fila.' : queued ? queued + ' download(s) na fila.' : 'Nenhum download pendente. Histórico completo no app.';
+      const downloads = (n: number) => n === 1 ? '1 download' : n + ' downloads';
+      const percent = active?.progress?.percent;
+      element('queue').textContent = active ? active.title + (percent !== undefined ? ' · ' + Math.round(percent) + '%' : ' · em andamento') + (queued ? ' · ' + queued + ' na fila' : '') : snapshot.paused && queued ? 'Fila pausada: ' + downloads(queued) + (queued === 1 ? ' espera' : ' esperam') + ' você continuar.' : queued ? downloads(queued) + ' na fila.' : 'Nenhum download pendente. Histórico completo no app.';
+      const progress = element('queue-progress');
+      progress.hidden = !active;
+      progress.classList.toggle('indeterminate', percent === undefined);
+      if (percent === undefined) progress.removeAttribute('aria-valuenow'); else progress.setAttribute('aria-valuenow', String(Math.round(percent)));
+      (progress.firstElementChild as HTMLElement).style.transform = percent === undefined ? '' : 'scaleX(' + percent / 100 + ')';
       element('continue').hidden = !snapshot.paused || queued === 0;
       if (snapshot.error && !busy) feedback(snapshot.error, true);
     }
@@ -104,10 +115,12 @@ export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => voi
     const result = await client.request('analyze', { url: url.value.trim() });
     analysis = result; itemSelect.replaceChildren();
     for (const item of result.items) { const option = doc.createElement('option'); option.value = item.itemId; option.textContent = item.title; itemSelect.append(option); }
+    // A single video is already named by the title; the picker is for posts with several.
+    element('item-field').hidden = result.items.length <= 1;
     element('selection').hidden = false; renderQuality(); feedback('');
   }); });
   on('current-tab', 'click', () => { void action(async () => { const [tab] = await browser.tabs.query({ active: true, currentWindow: true }); if (!tab?.url) throw new Error('Não foi possível ler esta aba. Cole o link do vídeo.'); url.value = tab.url; analysis = undefined; element('selection').hidden = true; }); });
-  on('url', 'input', () => { analysis = undefined; element('selection').hidden = true; });
+  on('url', 'input', () => { analysis = undefined; element('selection').hidden = true; controls(); });
   on('item', 'change', () => renderQuality());
   on('mode', 'change', () => renderQuality());
   on('quality', 'change', () => renderQuality(quality.value));
@@ -148,8 +161,12 @@ export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => voi
   void initialize();
   return () => { stopped = true; if (timer) clearTimeout(timer); client.disconnect(); for (const remove of listeners) remove(); };
 }
+// The same label as the app's quality menu: "1080p Full HD · ≈ 256 MB".
 export function describeVideo(choice: VideoChoice): string {
-  return qualityName(choice) + (!choice.hasAudio && !choice.audioUnknown ? ' · sem som' : '');
+  const parts = [qualityName(choice)];
+  if (choice.sizeBytes) parts.push((choice.sizeEstimated ? '≈ ' : '') + sizeName(choice.sizeBytes));
+  if (!choice.hasAudio && !choice.audioUnknown) parts.push('sem som');
+  return parts.join(' · ');
 }
 const browser = browserAPI();
 if (browser && typeof document !== 'undefined') {

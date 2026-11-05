@@ -13,3 +13,13 @@ export function qualityName(choice: VideoChoice): string {
   if (size >= 720) return '720p HD';
   return `${Math.round(size)}p`;
 }
+
+// Same units as the desktop app's bytes(): binary steps, one decimal under 10.
+export function sizeName(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let amount = bytes / 1024, unit = 0;
+  while (amount >= 1024 && unit < units.length - 1) { amount /= 1024; unit++; }
+  return `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: amount < 10 ? 1 : 0 }).format(amount)} ${units[unit]}`;
+}

@@ -92,6 +92,7 @@ type cursor struct {
 
 type Service struct {
 	mu                 sync.Mutex
+	historyMu          sync.Mutex
 	ctx                context.Context
 	cancel             context.CancelFunc
 	wg                 sync.WaitGroup
@@ -329,11 +330,22 @@ func (s *Service) Dispatch(ctx context.Context, method string, payload json.RawM
 		}
 		return s.continueQueue()
 	case "archiveHistory":
-		var p struct{}
+		var p struct {
+			ID string `json:"id"`
+		}
 		if err := decode(payload, &p); err != nil {
 			return nil, err
 		}
-		return s.archiveHistory(work)
+		return s.archiveHistory(work, p.ID)
+	case "renameTask":
+		var p struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+		}
+		if err := decode(payload, &p); err != nil {
+			return nil, err
+		}
+		return s.renameTask(p.ID, p.Title)
 	case "chooseDestination":
 		var p struct{}
 		if err := decode(payload, &p); err != nil {
