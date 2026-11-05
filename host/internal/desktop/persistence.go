@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -94,6 +95,9 @@ func (s *Service) load() error {
 		}
 		seenID[r.Task.ID] = true
 		seenRequest[r.Task.RequestID] = true
+	}
+	for i := range saved.Tasks {
+		saved.Tasks[i].settleRename()
 	}
 	s.legacy = saved.LegacyHistory
 	s.tasks = saved.Tasks
@@ -369,6 +373,12 @@ func (s *Service) validateQueueRecord(r queuedRecord) error {
 	}
 	if r.Task.State != "completed" && r.Task.CompletedFile != nil {
 		return ErrCorruptQueue
+	}
+	if o := r.RenamedFrom; o != nil {
+		if r.Task.CompletedFile == nil || o.Title == "" || len(o.Title) > 4096 || !filepath.IsAbs(o.Path) || filepath.Clean(o.Path) != o.Path ||
+			!strings.EqualFold(filepath.Dir(o.Path), filepath.Dir(r.Task.CompletedFile.Path)) || !hostwin.IsWithin(r.DestinationPath, o.Path) {
+			return ErrCorruptQueue
+		}
 	}
 	return nil
 }

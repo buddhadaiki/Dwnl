@@ -156,6 +156,47 @@ func IdentifyFile(path string) (FileIdentity, error) {
 	return identity(h)
 }
 
+// HoldVerifiedFile proves from one handle that path is a regular file with the
+// recorded size and SHA-256, and keeps that handle open until release. It
+// denies writers, so the bytes cannot change before the caller acts on the
+// returned identity; delete sharing still lets PublishExactFile rename it.
+func HoldVerifiedFile(path string, size uint64, sha256Hex string) (FileIdentity, func(), error) {
+	p, err := win.UTF16PtrFromString(path)
+	if err != nil {
+		return FileIdentity{}, nil, err
+	}
+	h, err := win.CreateFile(p, win.GENERIC_READ, win.FILE_SHARE_READ|win.FILE_SHARE_DELETE, nil, win.OPEN_EXISTING, win.FILE_FLAG_OPEN_REPARSE_POINT|win.FILE_FLAG_SEQUENTIAL_SCAN, 0)
+	if errors.Is(err, win.ERROR_SHARING_VIOLATION) {
+		return FileIdentity{}, nil, ErrFileInUse
+	}
+	if err != nil {
+		return FileIdentity{}, nil, err
+	}
+	f := os.NewFile(uintptr(h), path)
+	if f == nil {
+		win.CloseHandle(h)
+		return FileIdentity{}, nil, errors.New("invalid file handle")
+	}
+	var info win.ByHandleFileInformation
+	if err = win.GetFileInformationByHandle(h, &info); err != nil {
+		f.Close()
+		return FileIdentity{}, nil, err
+	}
+	if info.FileAttributes&(win.FILE_ATTRIBUTE_DIRECTORY|win.FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+		f.Close()
+		return FileIdentity{}, nil, errors.New("not a regular file")
+	}
+	if uint64(info.FileSizeHigh)<<32|uint64(info.FileSizeLow) != size {
+		f.Close()
+		return FileIdentity{}, nil, errContentChanged
+	}
+	if err = matchContent(f, size, sha256Hex); err != nil {
+		f.Close()
+		return FileIdentity{}, nil, err
+	}
+	return FileIdentity{info.VolumeSerialNumber, info.FileIndexHigh, info.FileIndexLow}, func() { f.Close() }, nil
+}
+
 // RemoveExactFile requires the identity captured when an owned intermediate was
 // created. A replaced pathname or reparse point is preserved and rejected.
 func RemoveExactFile(path string, want FileIdentity) error {
