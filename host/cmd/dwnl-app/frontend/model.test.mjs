@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {Window} from 'happy-dom';
-import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, choiceLabel, qualityName, newlyCompleted, clock, showExtensionCard, retryLabel} from './model.mjs';
+import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, choiceLabel, qualityName, newlyCompleted, newlyFinished, listLayout, clock, showExtensionCard, retryLabel} from './model.mjs';
 
 test('quality selection treats a portrait Short as 1080p, without selecting 4K', () => {
   const choices = [
@@ -87,6 +87,27 @@ test('only tasks seen unfinished count as newly completed', () => {
   const seen = new Map([['a','downloading'],['b','completed'],['c','saving']]);
   const tasks = [{id:'a',state:'completed'},{id:'b',state:'completed'},{id:'c',state:'failed'},{id:'d',state:'completed'}];
   assert.deepEqual(newlyCompleted(seen,tasks).map(t=>t.id),['a']);
+});
+
+test('a task that ends in any way gets a new icon; only a completed one gets a toast', () => {
+  const seen = new Map([['a','downloading'],['b','saving'],['c','queued'],['d','completed']]);
+  const tasks = [{id:'a',state:'completed'},{id:'b',state:'failed'},{id:'c',state:'downloading'},{id:'d',state:'completed'},{id:'e',state:'canceled'}];
+  assert.deepEqual(newlyFinished(seen,tasks).map(t=>t.id),['a','b']);
+  assert.deepEqual(newlyCompleted(seen,tasks).map(t=>t.id),['a']);
+});
+
+test('the list layout changes when rows arrive, leave or change state, not with progress', () => {
+  const running = {id:'a',state:'downloading',progress:{completedBytes:10}};
+  const base = {tasks:[{id:'old',state:'completed'},running]};
+  const layout = listLayout(base,'queue');
+  assert.equal(listLayout({tasks:[base.tasks[0],{...running,progress:{completedBytes:99}}]},'queue'),layout);
+  assert.notEqual(listLayout({tasks:[...base.tasks,{id:'b',state:'queued'}]},'queue'),layout);
+  assert.notEqual(listLayout({tasks:[base.tasks[0],{...running,state:'failed',error:'x'}]},'queue'),layout);
+  assert.notEqual(listLayout({tasks:[running]},'queue'),layout);
+  assert.notEqual(listLayout({...base,paused:true},'queue'),layout);
+  assert.notEqual(listLayout(base,'history'),layout);
+  // History shows finished rows only, so a queued arrival leaves it in place.
+  assert.equal(listLayout({tasks:[...base.tasks,{id:'b',state:'queued'}]},'history'),listLayout(base,'history'));
 });
 
 test('desktop uses native state, explicit quality, guards double clicks and escapes titles', async () => {

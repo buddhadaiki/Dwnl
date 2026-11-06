@@ -72,7 +72,21 @@ export function partitionTasks(tasks = []) {
 
 // Tasks seen running before that are now completed: the moments worth a toast.
 export function newlyCompleted(previous, tasks = []) {
-  return tasks.filter(t => t.state === 'completed' && previous.has(t.id) && !terminalStates.has(previous.get(t.id)));
+  return newlyFinished(previous, tasks).filter(t => t.state === 'completed');
+}
+
+// Tasks seen running before that have now ended in any way: their icon changes.
+export function newlyFinished(previous, tasks = []) {
+  return tasks.filter(t => terminalStates.has(t.state) && previous.has(t.id) && !terminalStates.has(previous.get(t.id)));
+}
+
+// What a view lays out: which rows, in which order and state. Progress alone
+// leaves it unchanged, so only a row arriving, leaving or changing shape moves
+// the list.
+export function listLayout(snapshot, view) {
+  const {queue, history} = partitionTasks(snapshot?.tasks);
+  const rows = view === 'queue' ? [...queue, ...history.slice(0, recentLimit)] : history;
+  return [view, snapshot?.paused ? 'paused' : '', snapshot?.legacyHistory?.length ?? 0, ...rows.map(t => t.id + ':' + t.state + (t.error ? '!' : ''))].join('|');
 }
 
 export function appendChoices(existing, incoming) {
