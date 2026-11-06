@@ -114,7 +114,7 @@ func (s *Service) enqueue(p enqueuePayload) (Task, error) {
 	for _, r := range s.tasks {
 		if r.Task.RequestID == p.RequestID {
 			if r.Fingerprint != key {
-				return Task{}, errors.New("REQUEST_CONFLICT: este identificador já pertence a outro download.")
+				return Task{}, errors.New("Este identificador já pertence a outro download.")
 			}
 			return cloneTask(r.Task), nil
 		}
@@ -153,7 +153,8 @@ func (s *Service) enqueue(p enqueuePayload) (Task, error) {
 	}
 	destination, err := s.destinations.Resolve(p.DestinationID)
 	if err != nil {
-		return Task{}, err
+		// Resolve is shared with the legacy host and reports in English.
+		return Task{}, &displayError{message: destinationMessage, err: err}
 	}
 	identity, err := s.engine.SelectionIdentity(p.AnalysisID, p.ItemID, p.VideoOptionID)
 	var expired *contracts.ProtocolError

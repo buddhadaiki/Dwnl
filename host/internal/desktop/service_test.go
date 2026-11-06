@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"dwnl/host/internal/contracts"
+	"dwnl/host/internal/desktopipc"
 	"dwnl/host/internal/storage"
 	"dwnl/host/internal/testutil"
 	hostwin "dwnl/host/internal/windows"
@@ -27,6 +28,7 @@ type fakeEngine struct {
 	started                            chan string
 	probeGate                          chan struct{}
 	probeErr, executeErr               error
+	analyzeErr, identityErr            error
 	changed                            bool
 	identities                         map[string]string
 }
@@ -54,6 +56,9 @@ func (f *fakeEngine) Analyze(ctx context.Context, url string) (contracts.Analysi
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.analyzeErr != nil {
+		return contracts.Analysis{}, f.analyzeErr
+	}
 	f.count++
 	id := fmt.Sprintf("analysis-%d", f.count)
 	item := fmt.Sprintf("item-%d", f.count)
@@ -70,6 +75,9 @@ func (f *fakeEngine) Analyze(ctx context.Context, url string) (contracts.Analysi
 func (f *fakeEngine) SelectionIdentity(a, i, o string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.identityErr != nil {
+		return "", f.identityErr
+	}
 	id, ok := f.identities[a+":"+i+":"+o]
 	if !ok {
 		return "", errors.New("expired")
@@ -553,6 +561,44 @@ func TestFailedDownloadErrorIsShownInPortuguese(t *testing.T) {
 	}
 }
 
+// Failures saved by 0.2.1 as "CODE: English diagnostic" load in Portuguese.
+func TestSavedEnglishFailureLoadsInPortuguese(t *testing.T) {
+	f := newFake()
+	f.executeErr = &contracts.ProtocolError{Code: contracts.InvalidOutput, Message: "Task ended with INVALID_OUTPUT"}
+	c := fixtureConfig(t, f)
+	s := startService(t, c)
+	task := enqueue(t, s, selection(t, s, "saved-failure"))
+	waitStarted(t, f)
+	f.gate <- struct{}{}
+	waitFor(t, func() bool { return state(t, s, task.ID) == "failed" })
+	s.Close()
+	path := filepath.Join(c.StateRoot, "desktop-queue.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portuguese, _ := json.Marshal(protocolMessages[contracts.InvalidOutput])
+	saved := strings.Replace(string(data), string(portuguese), `"INVALID_OUTPUT: Task ended with INVALID_OUTPUT"`, 1)
+	if saved == string(data) {
+		t.Fatal("queue does not hold the failure text")
+	}
+	if err = os.WriteFile(path, []byte(saved), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.Engine = newFake()
+	reopened := startService(t, c)
+	for _, got := range snapshot(t, reopened).Tasks {
+		if got.ID == task.ID && got.Error != protocolMessages[contracts.InvalidOutput] {
+			t.Fatalf("saved failure loaded as %q", got.Error)
+		}
+	}
+	for _, text := range []string{"Este identificador já pertence a outro download.", "NOT_A_CODE: texto", "Download interrompido."} {
+		if got := savedErrorText(text); got != text {
+			t.Fatalf("%q rewritten as %q", text, got)
+		}
+	}
+}
+
 func TestSafeErrorNeverExposesProtocolText(t *testing.T) {
 	codes := []contracts.ErrorCode{contracts.InvalidMessage, contracts.MessageTooLarge, contracts.IncompatibleProtocol, contracts.UnknownOperation, contracts.InvalidSelection, contracts.SessionEnded, contracts.AnalysisExpired, contracts.InvalidCursor, contracts.Busy, contracts.RequestConflict, contracts.UnknownJob, contracts.DependencyUnavailable, contracts.MP3Unavailable, contracts.NoAudio, contracts.AccessRestricted, contracts.NetworkError, contracts.NetworkPolicyBlocked, contracts.DestinationError, contracts.DiskFull, contracts.EngineError, contracts.CancelFailed, contracts.InvalidOutput, contracts.InternalError, "FUTURE_CODE"}
 	raw := "Raw English diagnostic text."
@@ -566,6 +612,56 @@ func TestSafeErrorNeverExposesProtocolText(t *testing.T) {
 		if _, ok := protocolMessages[code]; !ok && code != "FUTURE_CODE" {
 			t.Fatalf("%s has no Portuguese message", code)
 		}
+	}
+}
+
+func TestDispatchErrorsAreShownInPortuguese(t *testing.T) {
+	f := newFake()
+	s := startService(t, fixtureConfig(t, f))
+	s.mu.Lock()
+	s.paused = true
+	s.mu.Unlock()
+	fail := func(ctx context.Context, method string, payload any, want string) {
+		t.Helper()
+		b, _ := json.Marshal(payload)
+		_, err := s.Dispatch(ctx, method, b)
+		if err == nil || err.Error() != want {
+			t.Fatalf("%s %s: got %v, want %q", method, b, err, want)
+		}
+	}
+	setFake := func(analyze, identity error) {
+		f.mu.Lock()
+		f.analyzeErr, f.identityErr = analyze, identity
+		f.mu.Unlock()
+	}
+
+	queued := selection(t, s, "queued")
+	enqueue(t, s, queued)
+	conflict := queued
+	conflict.DestinationID = "destination-other"
+	fail(context.Background(), "enqueue", conflict, "Este identificador já pertence a outro download.")
+	unknownFolder := selection(t, s, "unknown-folder")
+	unknownFolder.DestinationID = "destination-unknown"
+	fail(context.Background(), "enqueue", unknownFolder, destinationMessage)
+	changed := selection(t, s, "changed")
+	setFake(nil, &contracts.ProtocolError{Code: contracts.InvalidSelection, Message: "The selected source format is unavailable."})
+	fail(context.Background(), "enqueue", changed, protocolMessages[contracts.InvalidSelection])
+	setFake(nil, nil)
+	fail(context.Background(), "listFormats", map[string]string{"analysisId": "bad id", "itemId": "item"}, protocolMessages[contracts.InvalidMessage])
+
+	fail(context.Background(), "analyze", map[string]string{"url": "https://example.com/video"}, invalidSourceMessage)
+	setFake(&contracts.ProtocolError{Code: contracts.InvalidMessage, Message: "Use a supported HTTPS media URL without credentials."}, nil)
+	fail(context.Background(), "analyze", map[string]string{"url": "https://www.youtube.com/shorts/owned"}, invalidSourceMessage)
+	setFake(&contracts.ProtocolError{Code: contracts.EngineError, Message: "The media dependency could not process this input."}, nil)
+	fail(context.Background(), "analyze", map[string]string{"url": "https://www.youtube.com/shorts/owned"}, protocolMessages[contracts.EngineError])
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	fail(canceled, "analyze", map[string]string{"url": "https://www.youtube.com/shorts/owned"}, "Operação interrompida.")
+
+	// The extension bridge still branches on the protocol code.
+	response := desktopipc.Handle(context.Background(), s.Dispatch, desktopipc.Request{Version: desktopipc.Version, ID: "bridge", Method: "analyze", Payload: json.RawMessage(`{"url":"https://www.youtube.com/shorts/owned"}`)})
+	if response.Error == nil || response.Error.Code != string(contracts.EngineError) || response.Error.Message != protocolMessages[contracts.EngineError] {
+		t.Fatalf("bridge error: %+v", response.Error)
 	}
 }
 func TestCallerDisconnectDoesNotCancelAcceptedDownload(t *testing.T) {

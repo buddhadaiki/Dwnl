@@ -98,6 +98,7 @@ func (s *Service) load() error {
 	}
 	for i := range saved.Tasks {
 		saved.Tasks[i].settleRename()
+		saved.Tasks[i].Task.Error = savedErrorText(saved.Tasks[i].Task.Error)
 	}
 	s.legacy = saved.LegacyHistory
 	s.tasks = saved.Tasks
@@ -263,7 +264,7 @@ func (s *Service) recover() error {
 				if r.Task.State != "failed" || r.Task.Error == "" {
 					r.Task.Error = "O download falhou antes do reinício do aplicativo."
 					if record.Snapshot.Error != nil {
-						r.Task.Error = string(record.Snapshot.Error.Code) + ": " + r.Task.Error
+						r.Task.Error += " " + protocolText(record.Snapshot.Error.Code)
 					}
 				}
 				r.Task.State = "failed"
