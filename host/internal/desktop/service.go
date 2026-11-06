@@ -271,7 +271,8 @@ func clonePtr[T any](p *T) *T {
 
 // Dispatch owns no task lifecycle: canceling the caller only cancels that
 // caller's analysis or picker, never already accepted queue entries.
-func (s *Service) Dispatch(ctx context.Context, method string, payload json.RawMessage) (any, error) {
+func (s *Service) Dispatch(ctx context.Context, method string, payload json.RawMessage) (_ any, err error) {
+	defer func() { err = dispatchError(method, err) }()
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -408,6 +409,9 @@ var protocolMessages = map[contracts.ErrorCode]string{
 	contracts.InternalError:         "O Dwnl encontrou um erro interno.",
 }
 
+const invalidSourceMessage = "Use um link HTTPS do YouTube, Instagram, TikTok ou X, sem usuário ou senha."
+const destinationMessage = "A pasta de destino não pôde ser usada. Escolha a pasta novamente."
+
 func safeError(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "O tempo limite foi atingido. Tente novamente."
@@ -415,21 +419,64 @@ func safeError(err error) string {
 	if errors.Is(err, context.Canceled) {
 		return "Operação interrompida."
 	}
-	var p *contracts.ProtocolError
-	if errors.As(err, &p) {
-		return protocolMessage(p.Code)
-	}
-	var d *contracts.ProtocolDecodeError
-	if errors.As(err, &d) {
-		return protocolMessage(d.Code)
+	if code, ok := protocolCode(err); ok {
+		return protocolText(code)
 	}
 	return "Falha local ao executar ou salvar a operação. Verifique a pasta e o espaço disponível."
 }
-func protocolMessage(code contracts.ErrorCode) string {
-	if message, ok := protocolMessages[code]; ok {
+
+// protocolText is the fixed Portuguese text for a protocol code; unknown codes
+// read as an internal error.
+func protocolText(code contracts.ErrorCode) string {
+	if message, known := protocolMessages[code]; known {
 		return message
 	}
 	return protocolMessages[contracts.InternalError]
+}
+
+// Up to 0.2.1 a failure was saved as "CODE: English diagnostic". A saved text
+// that starts with a known code shows that code's Portuguese text instead.
+func savedErrorText(text string) string {
+	code, _, found := strings.Cut(text, ": ")
+	if _, known := protocolMessages[contracts.ErrorCode(code)]; found && known {
+		return protocolMessages[contracts.ErrorCode(code)]
+	}
+	return text
+}
+func protocolCode(err error) (contracts.ErrorCode, bool) {
+	var p *contracts.ProtocolError
+	if errors.As(err, &p) {
+		return p.Code, true
+	}
+	var d *contracts.ProtocolDecodeError
+	if errors.As(err, &d) {
+		return d.Code, true
+	}
+	return "", false
+}
+
+// displayError replaces only the text: the wrapped error stays reachable, so
+// the extension bridge still reports the protocol code it branches on.
+type displayError struct {
+	message string
+	err     error
+}
+
+func (e *displayError) Error() string { return e.message }
+func (e *displayError) Unwrap() error { return e.err }
+
+// dispatchError leaves this package's own Portuguese errors untouched and
+// rewrites engine, contract and context errors, whose text is English.
+func dispatchError(method string, err error) error {
+	code, typed := protocolCode(err)
+	if err == nil || !typed && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	message := safeError(err)
+	if method == "analyze" && code == contracts.InvalidMessage {
+		message = invalidSourceMessage
+	}
+	return &displayError{message: message, err: err}
 }
 func fingerprint(p contracts.StartPayload) string {
 	b, _ := json.Marshal(p)

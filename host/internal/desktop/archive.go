@@ -18,7 +18,7 @@ import (
 const maxArchiveBytes = 128 * 1024
 
 var ErrCorruptArchive = errors.New("O recibo arquivado está corrompido ou pertence a outro usuário. Ele foi preservado; o download não será duplicado.")
-var ErrArchiveConflict = errors.New("REQUEST_CONFLICT: há um recibo diferente para este identificador. Os registros foram preservados.")
+var ErrArchiveConflict = errors.New("Há um recibo diferente para este identificador. Os registros foram preservados.")
 
 type archiveFile struct {
 	Version int          `json:"version"`
