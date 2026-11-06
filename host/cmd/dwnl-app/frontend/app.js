@@ -1,7 +1,7 @@
-import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyCompleted, appendChoices, isVideoURL, pollDelay, showExtensionCard, retryLabel} from './model.mjs';
+import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyFinished, listLayout, appendChoices, isVideoURL, pollDelay, showExtensionCard, retryLabel} from './model.mjs';
 
 const $ = id => document.getElementById(id);
-const state = {snapshot:null, analysis:null, item:null, view:'queue', analyzing:false, enqueuing:false, loadingFormats:false, requestId:null, requestKey:null, failures:0, pollTimer:null, refreshing:false, selectionVersion:0, exiting:false, archiving:false, seen:null, toastTask:null, toastTimer:null, pastedWhileAnalyzing:false, analyzeWhenReady:false, retryMode:null, extensionDismissed:false, copyTimer:null, removeId:null, removing:false, renameId:null, renaming:false};
+const state = {snapshot:null, analysis:null, item:null, view:'queue', analyzing:false, enqueuing:false, loadingFormats:false, requestId:null, requestKey:null, failures:0, pollTimer:null, refreshing:false, selectionVersion:0, exiting:false, archiving:false, seen:null, toastTask:null, toastTimer:null, pastedWhileAnalyzing:false, analyzeWhenReady:false, retryMode:null, extensionDismissed:false, copyTimer:null, removeId:null, removing:false, renameId:null, renaming:false, layout:null, finishing:new Set(), transition:null, landing:null};
 // Remembered per WebView profile; the card is a nudge, Settings always keep the steps.
 const extensionDismissKey = 'dwnl.extensionCardDismissed';
 try { state.extensionDismissed = window.localStorage.getItem(extensionDismissKey) === '1'; } catch {}
@@ -18,6 +18,42 @@ const icons = {
   close:'<path d="M7 7l10 10M17 7 7 17"/>',
 };
 const icon = name => '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + icons[name] + '</svg>';
+
+// Layout changes play as view transitions: the page slides between tabs, rows
+// glide to their new place, arrivals fade in and departures fade out. Without
+// support, under reduced motion or while the window is hidden, they just happen.
+const transitionNames = new Map();
+const transitionName = id => {
+  if (!transitionNames.has(id)) transitionNames.set(id, 'task-' + transitionNames.size);
+  return transitionNames.get(id);
+};
+const still = () => typeof document.startViewTransition !== 'function' || document.hidden || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+// Dialogs sit under the transition layer, so moving rows would draw over one
+// that is open or still fading out.
+const dialogShown = () => [...document.querySelectorAll('dialog')].some(dialog => window.getComputedStyle(dialog).display !== 'none');
+function animate(kind, update, back = false) {
+  // A list change never cuts a running transition short; it lands in its live view.
+  if (still() || kind === 'list' && (state.transition || dialogShown())) { update(); return Promise.resolve(); }
+  const root = document.documentElement;
+  root.classList.remove('vt-tabs', 'vt-list', 'vt-back');
+  root.classList.add('vt-' + kind);
+  root.classList.toggle('vt-back', back);
+  const transition = document.startViewTransition(update);
+  state.transition = transition;
+  transition.ready.catch(() => {});
+  const done = () => {
+    if (state.transition !== transition) return;
+    state.transition = null;
+    root.classList.remove('vt-tabs', 'vt-list', 'vt-back');
+  };
+  transition.finished.then(done, done);
+  return transition.updateCallbackDone;
+}
+// Let a dialog fade out before the list behind it moves.
+async function closeDialog(dialog) {
+  dialog.close();
+  if (!still()) await new Promise(resolve => setTimeout(resolve, 180));
+}
 
 async function call(method, payload = {}, timeout = 15000) {
   const bridge = window.go?.main?.App?.Call;
@@ -43,11 +79,17 @@ function notice(id, value) {
 const mode = () => document.querySelector('input[name="mode"]:checked')?.value ?? 'video';
 function setMode(value) { $(value === 'mp3' ? 'mode-mp3' : 'mode-video').checked = true; }
 
+// Downloads is the left tab, so going back to it slides the page the other way.
 function showView(view) {
-  state.view = view;
+  if (view === state.view) { renderView(); return Promise.resolve(); }
+  return animate('tabs', () => { state.view = view; renderView(); }, view === 'queue');
+}
+function renderView() {
+  const view = state.view;
   for (const [id, name] of [['nav-queue','queue'],['nav-history','history']]) {
     $(id).classList.toggle('selected', view === name);
-    if (view === name) $(id).setAttribute('aria-current','page'); else $(id).removeAttribute('aria-current');
+    if (view === name) { $(id).setAttribute('aria-current','page'); $(id).append($('tab-indicator')); }
+    else $(id).removeAttribute('aria-current');
   }
   $('composer').hidden = view !== 'queue';
   $('queue-hint').hidden = view !== 'queue';
@@ -190,12 +232,23 @@ function renderList(container, tasks) {
     if (!row) {
       row = document.createElement('article');
       row.dataset.id = task.id;
+      row.style.setProperty('--vt', transitionName(task.id));
+      if (task.id === state.landing) row.style.setProperty('--vt-class', 'landing');
       row.innerHTML = '<span class="task-icon"></span><div class="task-body"><h3 class="task-title"></h3><p class="task-meta"></p><div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" hidden><div class="progress-fill"></div></div><p class="task-error" hidden></p></div><div class="task-actions"></div>';
     }
     updateRow(row, task);
+    if (state.finishing.has(task.id)) settleIcon(row.querySelector('.task-icon'));
     if (container.children[index] !== row) container.insertBefore(row, container.children[index] ?? null);
   });
   for (const row of rows.values()) row.remove();
+}
+
+// A download that just ended swaps its icon with a short reveal.
+function settleIcon(element) {
+  element.classList.remove('settled');
+  void element.offsetWidth;
+  element.classList.add('settled');
+  element.addEventListener('animationend', () => element.classList.remove('settled'), {once:true});
 }
 
 function renderTasks() {
@@ -238,6 +291,7 @@ function renderTasks() {
   $('empty-state').hidden = !empty;
   $('empty-state').querySelector('h3').textContent = queueView ? 'Nenhum download na fila' : 'Nada no histórico ainda';
   $('empty-state').querySelector('p').textContent = queueView ? 'Cole um link acima para começar. Os downloads continuam mesmo com a janela fechada.' : 'Os arquivos baixados aparecem aqui, com atalho para a pasta.';
+  state.layout = listLayout(state.snapshot, state.view);
 }
 
 function showToast(task) {
@@ -314,11 +368,18 @@ async function analyze(event) {
     const analysis = await call('analyze', {url}, 120000);
     if (version !== state.selectionVersion) return;
     if (!analysis?.items?.length) throw new Error('Nenhum vídeo individual foi encontrado neste link.');
-    state.analysis = analysis;
-    $('item-field').hidden = analysis.items.length <= 1;
-    $('item-select').innerHTML = analysis.items.map(item => '<option value="' + escapeHTML(item.itemId) + '">' + escapeHTML(item.title || 'Vídeo') + '</option>').join('');
-    selectItem();
-    $('enqueue-button').focus({preventScroll:true});
+    // The options open where the progress line was, and the lists glide down.
+    let shown = false;
+    await animate('list', () => {
+      if (version !== state.selectionVersion) return;
+      state.analysis = analysis;
+      notice('analysis-status', null);
+      $('item-field').hidden = analysis.items.length <= 1;
+      $('item-select').innerHTML = analysis.items.map(item => '<option value="' + escapeHTML(item.itemId) + '">' + escapeHTML(item.title || 'Vídeo') + '</option>').join('');
+      selectItem();
+      shown = true;
+    });
+    if (shown) $('enqueue-button').focus({preventScroll:true});
   } catch (error) { if (version === state.selectionVersion) notice('analysis-error',error); }
   finally {
     state.analyzing = false;
@@ -358,14 +419,31 @@ async function enqueue() {
   state.enqueuing = true;
   notice('analysis-error',null);
   updateSelection();
+  const media = $('selection').querySelector('.media');
   try {
-    await call('enqueue',payload);
+    const task = await call('enqueue',payload);
     state.analysis = null; state.item = null;
     $('source-url').value = '';
     $('source-url').focus({preventScroll:true});
+    // The chosen video's title travels down into the queue and becomes its row.
+    if (task?.id && ![...document.querySelectorAll('.task')].some(row => row.dataset.id === task.id)) {
+      state.landing = task.id;
+      media.style.setProperty('--vt', transitionName(task.id));
+      media.style.setProperty('--vt-class', 'landing');
+    }
     await refresh();
   } catch (error) { notice('analysis-error',error); }
-  finally { state.enqueuing = false; updateSelection(); }
+  finally {
+    // The marks stay until the transition has captured the new row.
+    const unmark = () => {
+      media.style.removeProperty('--vt');
+      for (const element of [media, ...document.querySelectorAll('.task')]) element.style.removeProperty('--vt-class');
+    };
+    if (state.transition) state.transition.finished.then(unmark, unmark); else unmark();
+    state.landing = null;
+    state.enqueuing = false;
+    updateSelection();
+  }
 }
 
 async function loadMore() {
@@ -398,15 +476,22 @@ async function refresh() {
     const snapshot = await call('snapshot',{},10000);
     if (!snapshot || !Array.isArray(snapshot.tasks)) throw new Error('O aplicativo retornou um estado de fila inválido.');
     // The first snapshot only records states; tasks finished before it are not news.
-    const finished = state.seen ? newlyCompleted(state.seen, snapshot.tasks) : [];
+    const finished = state.seen ? newlyFinished(state.seen, snapshot.tasks) : [];
+    const completed = finished.filter(task => task.state === 'completed');
     state.seen = new Map(snapshot.tasks.map(task => [task.id, task.state]));
-    state.snapshot = snapshot;
-    state.failures = 0;
-    notice('global-error',null);
-    renderReadiness();
-    renderTasks();
-    renderExtension();
-    if (finished.length) showToast(finished.at(-1));
+    const render = () => {
+      state.snapshot = snapshot;
+      state.failures = 0;
+      state.finishing = new Set(finished.map(task => task.id));
+      notice('global-error',null);
+      renderReadiness();
+      renderTasks();
+      renderExtension();
+      state.finishing.clear();
+      if (completed.length) showToast(completed.at(-1));
+    };
+    // Progress repaints in place; only rows arriving, leaving or changing shape animate.
+    await (state.layout && listLayout(snapshot, state.view) !== state.layout ? animate('list', render) : render());
   } catch (error) {
     state.failures++;
     notice('global-error',error);
@@ -462,7 +547,7 @@ $('extension-setting-button').addEventListener('click',openExtensionSteps);
 $('extension-dismiss').addEventListener('click',() => {
   state.extensionDismissed = true;
   try { window.localStorage.setItem(extensionDismissKey,'1'); } catch {}
-  renderExtension();
+  animate('list', renderExtension);
 });
 $('extension-open-chrome').addEventListener('click',() => windowAction($('extension-open-chrome'),'OpenChrome'));
 $('extension-open-folder').addEventListener('click',() => windowAction($('extension-open-folder'),'OpenExtensionFolder'));
@@ -502,7 +587,7 @@ $('exit-button').addEventListener('click', async () => {
 });
 
 
-$('show-history-limit').addEventListener('click', () => { showView('history'); $('archive-history').focus(); });
+$('show-history-limit').addEventListener('click', async () => { await showView('history'); $('archive-history').focus(); });
 $('archive-history').addEventListener('click', () => {
   notice('archive-error',null);
   $('archive-dialog').showModal();
@@ -520,7 +605,7 @@ $('archive-confirm').addEventListener('click', async () => {
     const result = await call('archiveHistory',{});
     if (!Number.isInteger(result?.archived) || result.archived < 0) throw new Error('Não foi possível confirmar a limpeza. Confira a lista antes de repetir.');
     notice('history-status',result.archived === 1 ? '1 registro removido da lista. O arquivo continua na pasta.' : result.archived + ' registros removidos da lista. Os arquivos continuam na pasta.');
-    $('archive-dialog').close();
+    await closeDialog($('archive-dialog'));
     await refresh();
   } catch (error) { notice('archive-error',error); }
   finally {
@@ -536,16 +621,19 @@ const findTask = id => state.snapshot?.tasks?.find(task => task.id === id);
 
 // A failed or canceled download starts over in the composer: a fresh analysis
 // shows the qualities available now, and an MP3 stays an MP3 at its bitrate.
-function retryTask(id) {
+async function retryTask(id) {
   const task = findTask(id);
   if (!retryLabel(task)) return;
-  showView('queue');
+  // From the history the page slides over, so it jumps to the top first; in
+  // Downloads it scrolls up to the link.
+  const sliding = state.view !== 'queue';
+  window.scrollTo?.({top:0, behavior:sliding || still() ? 'auto' : 'smooth'});
+  await showView('queue');
   const input = $('source-url');
   input.value = task.url;
   input.dispatchEvent(new window.Event('input'));
   state.retryMode = task.mode;
   if (task.mode === 'mp3' && task.bitrateKbps) $('bitrate-select').value = String(task.bitrateKbps);
-  window.scrollTo?.({top:0, behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
   input.focus({preventScroll:true});
   analyzeIfLink();
 }
@@ -570,7 +658,7 @@ $('remove-confirm').addEventListener('click', async () => {
   try {
     const result = await call('archiveHistory',{id:state.removeId});
     if (result?.archived !== 1) throw new Error('Não foi possível confirmar. Confira a lista antes de repetir.');
-    $('remove-dialog').close();
+    await closeDialog($('remove-dialog'));
     await refresh();
   } catch (error) { notice('remove-error',error); }
   finally {

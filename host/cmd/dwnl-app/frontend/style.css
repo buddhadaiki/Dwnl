@@ -20,16 +20,16 @@ p{text-wrap:pretty}
 .hint{color:var(--text-2);font-size:12px;line-height:16px}
 
 /* Top bar */
-.topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:24px;height:52px;padding:0 16px 0 20px;background:var(--bg);border-bottom:1px solid var(--divider)}
+.topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:24px;height:52px;padding:0 16px 0 20px;background:var(--bg);border-bottom:1px solid var(--divider);view-transition-name:topbar}
 .brand{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;letter-spacing:-.1px}
 .brand-mark{width:22px;height:22px;fill:var(--accent)}
 .brand-tray{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 .tabs{display:flex;gap:4px;height:100%}
 .tab{position:relative;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--text-2);transition:color .12s ease}
 .tab:hover{color:var(--text)}
-.tab::after{content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--accent);transform:scaleX(0);transition:transform .2s var(--ease)}
 .tab.selected{color:var(--text);font-weight:600}
-.tab.selected::after{transform:scaleX(1)}
+/* One indicator lives in the selected tab; switching tabs slides it across. */
+.tab-indicator{position:absolute;left:12px;right:12px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--accent);pointer-events:none;view-transition-name:tab-indicator}
 .badge{min-width:20px;height:18px;padding:0 6px;border-radius:9px;background:var(--sunken);color:var(--text-2);font-size:11px;line-height:18px;font-weight:600;text-align:center;font-variant-numeric:tabular-nums}
 .tab.selected .badge{background:var(--accent-soft);color:var(--accent-text)}
 .topbar-end{margin-left:auto;display:flex;align-items:center;gap:12px}
@@ -92,11 +92,16 @@ p{text-wrap:pretty}
 select{width:100%;height:36px;padding:0 34px 0 12px;appearance:none;border:1px solid var(--stroke-strong);border-radius:6px;background:var(--field);cursor:pointer;transition:border-color .12s ease}
 select:hover:not(:disabled){border-color:var(--text-3)}
 select option{background:var(--surface);color:var(--text)}
-.segmented{display:flex;flex:none;padding:2px;border-radius:8px;background:var(--sunken);box-shadow:inset 0 0 0 1px var(--stroke)}
+.segmented{position:relative;display:grid;grid-template-columns:1fr 1fr;flex:none;padding:2px;border-radius:8px;background:var(--sunken);box-shadow:inset 0 0 0 1px var(--stroke)}
+/* One thumb slides under the checked option; 2px inset, so its radius is 8 - 2. */
+.segmented::before{content:"";position:absolute;top:2px;bottom:2px;left:2px;width:calc(50% - 2px);border-radius:6px;background:var(--surface);box-shadow:0 0 0 1px var(--stroke),0 1px 2px rgb(0 0 0/.08);transition:transform .25s var(--ease)}
+.segmented:has(#mode-mp3:checked)::before{transform:translateX(100%)}
 .segmented label{position:relative;cursor:pointer}
 .segmented input{position:absolute;opacity:0;inset:0;margin:0;cursor:inherit}
-.segmented span{display:block;height:32px;padding:0 14px;border-radius:6px;line-height:32px;color:var(--text-2);white-space:nowrap;transition:background-color .15s ease,color .15s ease,box-shadow .15s ease}
-.segmented input:checked+span{background:var(--surface);color:var(--text);font-weight:600;box-shadow:0 0 0 1px var(--stroke),0 1px 2px rgb(0 0 0/.08)}
+.segmented span{display:block;height:32px;padding:0 14px;border-radius:6px;line-height:32px;text-align:center;color:var(--text-2);white-space:nowrap;transition:color .15s ease}
+/* The bold label's width is reserved, so selecting never resizes the control. */
+.segmented span::before{content:attr(data-label);display:block;height:0;overflow:hidden;visibility:hidden;font-weight:600}
+.segmented input:checked+span{color:var(--text);font-weight:600}
 .segmented input:focus-visible+span{outline:2px solid var(--accent);outline-offset:1px}
 .segmented input:disabled+span{opacity:.45}
 .segmented label:has(input:disabled){cursor:default}
@@ -149,6 +154,7 @@ select option{background:var(--surface);color:var(--text)}
 .task+.task{border-top:1px solid var(--divider)}
 .task-icon{display:grid;place-items:center;color:var(--text-3)}
 .task-icon .icon{width:20px;height:20px}
+.task-icon.settled .icon{animation:icon-in .3s var(--ease) both}
 .task.completed .task-icon{color:var(--success)}
 .task.failed .task-icon{color:var(--danger)}
 .task.interrupted .task-icon,.task.interrupted .task-status{color:var(--caution)}
@@ -192,7 +198,7 @@ select option{background:var(--surface);color:var(--text)}
 .legacy-section>.hint{margin:-4px 0 8px}
 
 /* Toast */
-.toast{position:fixed;left:50%;bottom:20px;z-index:20;display:flex;align-items:center;gap:12px;width:min(560px,calc(100% - 32px));padding:8px 8px 8px 16px;border-radius:10px;background:var(--surface);box-shadow:var(--shadow-pop);transform:translateX(-50%);transition:opacity .2s var(--ease),transform .2s var(--ease)}
+.toast{position:fixed;left:50%;bottom:20px;z-index:20;display:flex;align-items:center;gap:12px;width:min(560px,calc(100% - 32px));padding:8px 8px 8px 16px;border-radius:10px;background:var(--surface);box-shadow:var(--shadow-pop);transform:translateX(-50%);transition:opacity .2s var(--ease),transform .2s var(--ease);view-transition-name:toast}
 @starting-style{.toast{opacity:0;transform:translate(-50%,8px)}}
 .toast.leaving{opacity:0;transform:translate(-50%,4px)}
 .toast-icon{color:var(--success);width:20px;height:20px}
@@ -200,9 +206,15 @@ select option{background:var(--surface);color:var(--text)}
 .toast-text span{color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* Dialogs */
-dialog{width:min(440px,calc(100% - 32px));padding:24px;border:0;border-radius:10px;background:var(--surface);color:var(--text);box-shadow:var(--shadow-pop);transition:opacity .15s var(--ease),transform .15s var(--ease)}
+/* Dialogs open in 200ms and close in 150ms; display and overlay stay discrete
+   until the fade ends, so closing animates too. */
+dialog{width:min(440px,calc(100% - 32px));padding:24px;border:0;border-radius:10px;background:var(--surface);color:var(--text);box-shadow:var(--shadow-pop);transition:opacity .15s var(--ease),transform .15s var(--ease),overlay .15s allow-discrete,display .15s allow-discrete}
+dialog[open]{transition-duration:.2s}
+dialog:not([open]){opacity:0;transform:scale(.98)}
 @starting-style{dialog[open]{opacity:0;transform:scale(.98)}}
-dialog::backdrop{background:rgb(0 0 0/.35)}
+dialog::backdrop{background:rgb(0 0 0/0);transition:background-color .15s var(--ease),overlay .15s allow-discrete,display .15s allow-discrete}
+dialog[open]::backdrop{background:rgb(0 0 0/.35);transition-duration:.2s}
+@starting-style{dialog[open]::backdrop{background:rgb(0 0 0/0)}}
 dialog h2{font-size:18px;line-height:24px;font-weight:600}
 .dialog-heading{display:flex;justify-content:space-between;align-items:center;margin:-4px -8px 16px 0}
 .setting-row,.exit-setting{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:14px 0;border-top:1px solid var(--divider)}
@@ -229,6 +241,65 @@ input[role=switch]:checked::before{background:#fff;transform:translateX(20px)}
 .text-field:focus{outline:none;border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 #queue-limit-notice .link-button{height:auto;margin-left:6px}
 
+/* View transitions (app.js animate). The topbar, its indicator and the toast
+   are always named so they stay above moving parts. Switching tabs names the
+   whole page; a list change names each part that can move, and each row by
+   its task. Everything else crossfades. */
+:root{--vt-dir:1}
+:root.vt-back{--vt-dir:-1}
+/* Tabs glide on their own when the badge changes the first one's width. */
+#nav-queue{view-transition-name:tab-queue}
+#nav-history{view-transition-name:tab-history}
+/* A label changing width keeps its size and crossfades in place; scaling it would blur the text. */
+::view-transition-old(tab-queue),::view-transition-new(tab-queue),::view-transition-old(tab-history),::view-transition-new(tab-history){width:auto;height:auto}
+.vt-tabs .content{view-transition-name:content}
+.vt-list .composer{view-transition-name:composer}
+.vt-list .destination{view-transition-name:destination}
+.vt-list .extension-card{view-transition-name:extension}
+.vt-list #list-heading{view-transition-name:list-heading}
+.vt-list #paused-notice{view-transition-name:paused}
+.vt-list #task-list{view-transition-name:task-list}
+.vt-list #recent-section>.section-heading{view-transition-name:recent-heading}
+.vt-list #recent-list{view-transition-name:recent-list}
+.vt-list #empty-state{view-transition-name:empty-state}
+.vt-list :is(.task,.media){view-transition-name:var(--vt,none);view-transition-class:row var(--vt-class,)}
+/* Moving rows carry the card's surface and corners, so they cover what they pass. */
+.vt-list .task-list>.task{background:var(--surface)}
+.vt-list .task-list>.task:first-child{border-radius:10px 10px 0 0}
+.vt-list .task-list>.task:last-child{border-radius:0 0 10px 10px}
+.vt-list .task-list>.task:only-child{border-radius:10px}
+/* Clicks reach the real page underneath while it settles. */
+::view-transition{pointer-events:none}
+/* Groups stack in the old page's paint order, so a row leaving the queue would
+   pass under the cards below it. Rows ride above cards and headings; the
+   topbar, its tabs and the toast stay on top. */
+::view-transition-group(*.row){z-index:1}
+::view-transition-group(*.landing){z-index:2}
+::view-transition-group(topbar),::view-transition-group(tab-queue),::view-transition-group(tab-history),::view-transition-group(tab-indicator),::view-transition-group(toast){z-index:3}
+::view-transition-group(*){animation-duration:.3s;animation-timing-function:var(--ease)}
+/* The page leaves toward the tab it came from and arrives from the other side. */
+::view-transition-old(content){animation:vt-leave .1s var(--ease) both}
+::view-transition-new(content){animation:vt-enter .3s var(--ease) .05s both}
+/* Departures fade out faster than arrivals fade in. */
+::view-transition-old(*):only-child{animation-duration:.15s}
+::view-transition-old(composer),::view-transition-new(composer){animation-duration:.15s}
+/* With their rows lifted out, list cards are bare surfaces: stretch them with
+   their group rather than crossfading two heights. */
+::view-transition-old(task-list),::view-transition-new(task-list),::view-transition-old(recent-list),::view-transition-new(recent-list){height:100%}
+/* A row that changes place travels as its new self: no crossfade with its old
+   state, so text never doubles. Rows that only arrive or leave still fade. */
+::view-transition-old(*.row){animation:none;opacity:0}
+::view-transition-new(*.row){animation:none}
+::view-transition-old(*.row):only-child{animation:vt-fade-out .15s var(--ease) both;opacity:1}
+::view-transition-new(*.row):only-child{animation:vt-fade-in .3s var(--ease) both}
+/* Baixar: the new row rises out of the chosen title and drops into the queue. */
+::view-transition-group(*.landing){animation-duration:.4s}
+
+@keyframes vt-leave{to{opacity:0;transform:translateX(calc(var(--vt-dir) * -24px))}}
+@keyframes vt-enter{from{opacity:0;transform:translateX(calc(var(--vt-dir) * 24px))}}
+@keyframes vt-fade-out{to{opacity:0}}
+@keyframes vt-fade-in{from{opacity:0}}
+@keyframes icon-in{from{opacity:0;transform:scale(.25);filter:blur(4px)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(340%)}}
 @media(max-width:620px){.topbar{gap:12px;padding:0 8px 0 12px}.content{padding:16px 12px 32px}.url-row,.options{flex-wrap:wrap}.url-row .button,.options .button,.options .field,.segmented{flex:1 1 100%}.segmented label{flex:1;text-align:center}.task{grid-template-columns:20px minmax(0,1fr)}.task-actions{grid-column:2}.section-heading .hint{display:none}.extension-card{flex-wrap:wrap}.extension-actions{width:100%;justify-content:flex-end}}
