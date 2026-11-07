@@ -1,4 +1,4 @@
-# Dwnl 0.2.1 — aplicativo Windows e extensão auxiliar
+# Dwnl 0.3.0 — aplicativo Windows e extensão auxiliar
 
 ## Instalar
 
@@ -15,10 +15,11 @@ O setup não possui assinatura digital. Compare `SHA256SUMS.txt` antes de execut
 
 - Um download por vez; outros ficam na fila persistente do aplicativo.
 - Fechar a janela recolhe para a bandeja. Fechar o painel ou navegador não interrompe downloads aceitos.
-- Para encerrar, use **Sair** na bandeja ou **Sair do aplicativo** nas configurações. A fila fica preservada.
+- Para encerrar, use **Sair** na bandeja ou **Sair do Dwnl** nas configurações. A fila fica preservada.
 - Depois de interrupção/reinício, escolha **Continuar fila**. Nesta versão a transferência interrompida reinicia do começo, com a mesma mídia/qualidade; se não for possível identificar exatamente a seleção, o app informa o erro.
 - Iniciar com Windows é opcional, desligado por padrão, nas configurações.
-- O histórico oferece abrir o arquivo e sua pasta. **Arquivar histórico** retira registros concluídos/cancelados/falhos da lista, preservando arquivos e recibos de idempotência no estado privado. Até 200 registros permanecem na lista atual.
+- Downloads concluídos aparecem em **Recentes**, com **Mostrar na pasta**. Em **Ver histórico** é possível renomear o arquivo (o arquivo na pasta acompanha), apagar o registro da lista (o arquivo continua na pasta) e tentar de novo um download que falhou ou foi cancelado.
+- **Limpar histórico** retira da lista os registros concluídos, cancelados ou com falha, preservando os arquivos e os recibos de idempotência no estado privado. Até 200 registros permanecem na lista atual.
 - Pasta padrão: Downloads\Dwnl. Preferências, fila e recibos: `%LOCALAPPDATA%\Dwnl\state`. O histórico legado é preservado separadamente.
 
 ## Atualizar e remover
@@ -31,4 +32,4 @@ Remova a extensão em `chrome://extensions` e desinstale **Dwnl** pelos aplicati
 
 Windows x64 primeiro. Os pacotes Ubuntu e o modo legado continuam separados. Vídeos individuais, incluindo Shorts/Reels; playlists/canais não fazem parte desta etapa. Disponibilidade depende do site e vídeo.
 
-Foi exercitado download real de Shorts, recuperação da fila após encerramento forçado, janela nativa, IPC e ponte Native Messaging em processo isolado. A instalação pessoal e o carregamento no Chrome pessoal não foram alterados. Consulte `docs/validation/2026-10-19-desktop.md` no código para medições, testes e limites da validação.
+Foi exercitado download real de Shorts, recuperação da fila após encerramento forçado, janela nativa, IPC e ponte Native Messaging em processo isolado. A instalação pessoal e o carregamento no Chrome pessoal não foram alterados. Consulte `docs/validation/2026-10-19-desktop.md` e `docs/validation/2026-11-07-startup.md` no código para medições, testes e limites da validação.
