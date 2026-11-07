@@ -11,13 +11,9 @@ import (
 	hostruntime "dwnl/host/internal/runtime"
 )
 
+// Analysis reads no queue state, so it does not wait for recovery or the
+// dependency check: a link sent while the app prepares is searched at once.
 func (s *Service) analyze(ctx context.Context, url string) (contracts.Analysis, error) {
-	s.mu.Lock()
-	preparing := s.readiness == "preparing"
-	s.mu.Unlock()
-	if preparing {
-		return contracts.Analysis{}, errors.New("O aplicativo está preparando os componentes. Aguarde alguns segundos.")
-	}
 	select {
 	case s.analyzeSlot <- struct{}{}:
 		defer func() { <-s.analyzeSlot }()
@@ -30,6 +26,7 @@ func (s *Service) analyze(ctx context.Context, url string) (contracts.Analysis, 
 	defer cancel()
 	analysis, err := s.engine.Analyze(work, url)
 	if err != nil {
+		s.forgetProbe(err)
 		return contracts.Analysis{}, err
 	}
 	analysis.HostSessionID = s.sessionID

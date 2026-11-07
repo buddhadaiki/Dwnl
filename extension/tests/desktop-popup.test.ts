@@ -22,12 +22,24 @@ describe('desktop quick panel', () => {
     expect(host.snapshot.tasks).toHaveLength(1);
     expect(host.storage['dwnl-pending-enqueue-v2']).toBeNull();
   });
-  it('shows connected preparing state while media actions remain unavailable', async () => {
-    const host = environment(); host.snapshot.readiness = 'preparing'; await mount(host);
+  // Regression: "Buscar" stayed disabled for the whole dependency check.
+  it('searches while the app prepares and adds to the queue once it is ready', async () => {
+    const host = environment(), known = host.snapshot.capabilities;
+    host.snapshot.readiness = 'preparing'; host.snapshot.capabilities = { video: false, mp3: false, networkAccess: false }; await mount(host);
     expect(element('status').textContent).toContain('preparando');
-    expect(element<HTMLButtonElement>('analyze').disabled).toBe(true);
+    expect(element<HTMLButtonElement>('analyze').disabled).toBe(false);
     expect(element('reconnect').hidden).toBe(true);
     expect(element<HTMLButtonElement>('open-app').disabled).toBe(false);
+    await analyze();
+    expect(host.requests.some(request => request.method === 'analyze')).toBe(true);
+    expect(element<HTMLButtonElement>('enqueue').disabled).toBe(true);
+    const mp3 = () => element('mode').querySelector<HTMLOptionElement>('option[value="mp3"]')!;
+    expect(mp3().disabled).toBe(true);
+    host.snapshot.readiness = 'ready'; host.snapshot.capabilities = known;
+    for (let i = 0; i < 200 && element<HTMLButtonElement>('enqueue').disabled; i++) await new Promise(resolve => setTimeout(resolve, 10));
+    expect(element('status').textContent).toContain('pronto');
+    expect(element<HTMLButtonElement>('enqueue').disabled).toBe(false);
+    expect(mp3().disabled).toBe(false);
   });
   it('offers MP3 128/192/320 and never silently changes selected bitrate', async () => {
     const host = await mount(); await analyze();

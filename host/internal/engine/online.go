@@ -76,7 +76,7 @@ func validateOnlineSpec(s ports.ExecSpec) bool {
 		return false
 	}
 	raw := tail[len(tail)-1]
-	if mode == "dwnl:mode=probe" && raw != "https://www.youtube.com/watch?v=dwnl-private-self-test" {
+	if mode == "dwnl:mode=probe" && raw != adapterProbeURL {
 		return false
 	}
 	canonical, err := CanonicalSourceURL(raw)

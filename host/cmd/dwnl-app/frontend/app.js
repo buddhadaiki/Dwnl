@@ -1,4 +1,4 @@
-import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyFinished, listLayout, appendChoices, isVideoURL, pollDelay, showExtensionCard, retryLabel} from './model.mjs';
+import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyFinished, listLayout, appendChoices, isVideoURL, pollDelay, capability, showExtensionCard, retryLabel} from './model.mjs';
 
 const $ = id => document.getElementById(id);
 const state = {snapshot:null, analysis:null, item:null, view:'queue', analyzing:false, enqueuing:false, loadingFormats:false, requestId:null, requestKey:null, failures:0, pollTimer:null, refreshing:false, selectionVersion:0, exiting:false, archiving:false, seen:null, toastTask:null, toastTimer:null, pastedWhileAnalyzing:false, analyzeWhenReady:false, retryMode:null, extensionDismissed:false, copyTimer:null, removeId:null, removing:false, renameId:null, renaming:false, layout:null, finishing:new Set(), transition:null, landing:null};
@@ -160,10 +160,11 @@ function renderReadiness() {
   $('start-at-login').checked = Boolean(snapshot?.startAtLogin);
   const serviceError = snapshot?.error || (snapshot?.readiness === 'degraded' ? 'Alguns componentes não estão disponíveis. Veja em Configurações.' : '');
   notice('service-notice', serviceError);
-  const canAnalyze = Boolean(snapshot) && !preparing && state.failures === 0 && snapshot.capabilities?.networkAccess;
+  // A search reads no queue state, so the app answers it while it prepares.
+  const canAnalyze = Boolean(snapshot) && state.failures === 0 && capability(snapshot, 'networkAccess');
   $('analyze-button').disabled = state.analyzing || !canAnalyze;
   $('analyze-button').textContent = state.analyzing ? 'Buscando…' : 'Buscar';
-  $('source-hint').textContent = preparing ? 'Preparando os componentes de download. Pode colar o link: a busca começa assim que terminar.' : 'YouTube, TikTok, Instagram e X. Ao colar, o vídeo é buscado na hora.';
+  $('source-hint').textContent = preparing ? 'Preparando os componentes de download. Pode colar o link: a busca já funciona.' : 'YouTube, TikTok, Instagram e X. Ao colar, o vídeo é buscado na hora.';
   // A link pasted while the app was preparing keeps the paste promise once it is ready.
   if (canAnalyze && state.analyzeWhenReady && !state.analyzing) { state.analyzeWhenReady = false; queueMicrotask(analyzeIfLink); }
   const dependencies = snapshot?.dependencies ?? [];
@@ -325,14 +326,16 @@ function updateSelection() {
   $('more-formats').hidden = mp3 || !state.item.formatsCursor;
   $('more-formats').disabled = state.loadingFormats;
   $('more-formats').textContent = state.loadingFormats ? 'Carregando…' : 'Mostrar mais qualidades';
-  const videoAvailable = Boolean(state.snapshot?.capabilities?.video && state.item.videoChoices?.length);
-  const mp3Available = Boolean(state.snapshot?.capabilities?.mp3 && (state.item.hasAudio || state.item.audioUnknown));
+  const videoAvailable = Boolean(capability(state.snapshot, 'video') && state.item.videoChoices?.length);
+  const mp3Available = Boolean(capability(state.snapshot, 'mp3') && (state.item.hasAudio || state.item.audioUnknown));
+  // A search can finish before the app is ready; the queue opens right after.
+  const preparing = state.snapshot?.readiness === 'preparing';
   $('mode-video').disabled = !videoAvailable;
   $('mode-mp3').disabled = !mp3Available;
-  $('enqueue-button').disabled = state.enqueuing || !(mp3 ? mp3Available : videoAvailable && currentChoice()) || !state.snapshot?.destination?.destinationId || state.failures > 0;
+  $('enqueue-button').disabled = state.enqueuing || preparing || !(mp3 ? mp3Available : videoAvailable && currentChoice()) || !state.snapshot?.destination?.destinationId || state.failures > 0;
   $('enqueue-button').textContent = state.enqueuing ? 'Adicionando…' : 'Baixar';
   const choice = currentChoice();
-  $('format-hint').textContent = mp3 ? (mp3Available ? '' : 'Áudio indisponível para este vídeo.') : !videoAvailable ? 'Nenhuma qualidade de vídeo disponível.' : choice && !choice.hasAudio ? (choice.audioUnknown ? 'O som será confirmado durante o download.' : 'Este vídeo não tem som.') : '';
+  $('format-hint').textContent = preparing ? 'Preparando os componentes de download. Baixar libera em instantes.' : mp3 ? (mp3Available ? '' : 'Áudio indisponível para este vídeo.') : !videoAvailable ? 'Nenhuma qualidade de vídeo disponível.' : choice && !choice.hasAudio ? (choice.audioUnknown ? 'O som será confirmado durante o download.' : 'Este vídeo não tem som.') : '';
 }
 
 function selectItem() {
@@ -341,8 +344,8 @@ function selectItem() {
   $('media-title').textContent = state.item.title || 'Vídeo sem título';
   $('media-meta').textContent = [clock(state.item.durationSeconds), new URL(state.analysis.sourceUrl).hostname.replace(/^www\./, '')].filter(Boolean).join(' · ');
   renderChoices(defaultChoice(state.item.videoChoices));
-  const videoAvailable = state.snapshot?.capabilities?.video && state.item.videoChoices.length;
-  const mp3Available = state.snapshot?.capabilities?.mp3 && (state.item.hasAudio || state.item.audioUnknown);
+  const videoAvailable = capability(state.snapshot, 'video') && state.item.videoChoices.length;
+  const mp3Available = capability(state.snapshot, 'mp3') && (state.item.hasAudio || state.item.audioUnknown);
   setMode(state.retryMode === 'mp3' && mp3Available || !videoAvailable ? 'mp3' : 'video');
   updateSelection();
 }

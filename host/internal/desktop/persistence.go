@@ -139,13 +139,19 @@ func (s *Service) persist() error {
 	if len(b) > maxQueueBytes {
 		return errors.New("A fila atingiu o limite de armazenamento.")
 	}
+	return s.replaceStateFile("desktop-queue.json", b)
+}
+
+// replaceStateFile flushes data to a private temporary file and atomically
+// replaces the named state file with it.
+func (s *Service) replaceStateFile(name string, b []byte) error {
 	root := s.store.Root()
 	unlock, err := hostwin.LockPath(root, false)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	path := filepath.Join(root, "desktop-queue.json")
+	path := filepath.Join(root, name)
 	if err = hostwin.CheckPath(path, true); err != nil {
 		return err
 	}

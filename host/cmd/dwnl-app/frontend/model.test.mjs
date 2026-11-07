@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {Window} from 'happy-dom';
-import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, choiceLabel, qualityName, newlyCompleted, newlyFinished, listLayout, clock, showExtensionCard, retryLabel} from './model.mjs';
+import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, capability, choiceLabel, qualityName, newlyCompleted, newlyFinished, listLayout, clock, showExtensionCard, retryLabel} from './model.mjs';
 
 test('quality selection treats a portrait Short as 1080p, without selecting 4K', () => {
   const choices = [
@@ -53,6 +53,17 @@ test('polling slows when idle or disconnected', () => {
   // While the user follows the Chrome steps, the connection shows up quickly.
   assert.equal(pollDelay({readiness:'ready',tasks:[]},0,true),2000);
   assert.equal(pollDelay({readiness:'ready',tasks:[{state:'downloading'}]},0,true),1000);
+  // Preparing ends within seconds, so Baixar unlocks without a visible wait.
+  assert.equal(pollDelay({readiness:'preparing',tasks:[]}),250);
+});
+
+test('capabilities are provisional while the app prepares', () => {
+  const none = {video:false, mp3:false, networkAccess:false};
+  assert.equal(capability({readiness:'preparing',capabilities:none},'video'),true);
+  assert.equal(capability({readiness:'ready',capabilities:none},'video'),false);
+  assert.equal(capability({readiness:'degraded',capabilities:{...none, mp3:true}},'mp3'),true);
+  assert.equal(capability({readiness:'degraded',capabilities:none},'networkAccess'),false);
+  assert.equal(capability(null,'video'),false);
 });
 
 test('the Chrome card appears only for an installed, unconnected, undismissed extension', () => {
@@ -382,6 +393,42 @@ test('trying a failed MP3 again brings its link back and keeps the format', asyn
     assert.equal($('selection').hidden,false);
     assert.equal($('mode-mp3').checked,true);
     assert.equal($('bitrate-select').value,'320');
+  } finally {
+    window.dispatchEvent(new window.Event('beforeunload')); await window.happyDOM.abort();
+    delete globalThis.document;delete globalThis.window;
+  }
+});
+
+// Regression: a link pasted while the app prepared waited for the whole
+// dependency check before the search started.
+test('a link pasted while the app prepares is searched at once and Baixar opens when ready', async () => {
+  const window = new Window({url:'http://localhost/',settings:{disableJavaScriptFileLoading:true,disableJavaScriptEvaluation:true}});
+  window.document.write(await readFile(new URL('./index.html',import.meta.url),'utf8'));
+  globalThis.window = window; globalThis.document = window.document;
+  let readiness = 'preparing';
+  const analyzed = [];
+  window.go={main:{App:{Call:async(method,serialized) => {
+    if (method === 'snapshot') return {readiness,capabilities:{video:readiness === 'ready',mp3:readiness === 'ready',networkAccess:readiness === 'ready'},destination:{destinationId:'d'},tasks:[]};
+    if (method === 'analyze') { const {url} = JSON.parse(serialized); analyzed.push(url); return {analysisId:'a',sourceUrl:url,items:[{itemId:'i',title:'Clipe',hasAudio:true,videoChoices:[{optionId:'v',width:1080,height:1920,hasAudio:true}]}]}; }
+    throw new Error('Unexpected method '+method);
+  }}}};
+  const settle=async()=>{for(let i=0;i<5;i++)await new Promise(resolve=>setTimeout(resolve,0));};
+  try {
+    await import('./app.js?preparing='+Date.now()); await settle();
+    const $=id=>window.document.getElementById(id);
+    assert.equal($('analyze-button').disabled,false);
+    $('source-url').value='https://youtube.com/shorts/early';
+    $('source-url').dispatchEvent(new window.Event('paste')); await settle();
+    assert.deepEqual(analyzed,['https://youtube.com/shorts/early']);
+    // Unknown capabilities are not missing ones: the video stays selected.
+    assert.equal($('selection').hidden,false);
+    assert.equal($('mode-video').checked,true);
+    assert.equal($('enqueue-button').disabled,true);
+    assert.match($('format-hint').textContent,/Preparando/);
+    readiness = 'ready';
+    for (let i = 0; i < 100 && $('enqueue-button').disabled; i++) await new Promise(resolve=>setTimeout(resolve,10));
+    assert.equal($('enqueue-button').disabled,false);
+    assert.equal($('format-hint').textContent,'');
   } finally {
     window.dispatchEvent(new window.Event('beforeunload')); await window.happyDOM.abort();
     delete globalThis.document;delete globalThis.window;

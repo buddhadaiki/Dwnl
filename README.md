@@ -8,6 +8,7 @@ A nova etapa oferece aplicativo Go/Wails com WebView2, fila persistente independ
 
 - [Instalação e uso desktop](release/INSTALL.desktop.pt-BR.md)
 - [Validação e medições de 19/10](docs/validation/2026-10-19-desktop.md)
+- [Inicialização mais rápida, 07/11](docs/validation/2026-11-07-startup.md): reinícios prontos em ≈60 ms (antes ≈8 s) e busca liberada durante a preparação
 - Pacote local: `pwsh -NoProfile -File ./tools/release-desktop.ps1`
 - Desenvolvimento: `pwsh -NoProfile -File ./tools/build-desktop.ps1`; use `Dwnl.exe --state-dir <pasta absoluta isolada> --bin-dir <bin privado> --destination <pasta absoluta>` para não tocar na instalação pessoal.
 

@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"context"
 	"dwnl/host/internal/contracts"
 	"dwnl/host/internal/ports"
 	"path/filepath"
@@ -119,79 +118,4 @@ func safeInput(path string) bool {
 		return false
 	}
 	return validateLocalPath(path, false) == nil
-}
-
-// Probe reads versions and encoder capabilities without any media URL. A
-// missing dependency is represented in handshake capabilities, not hidden.
-func (e *Engine) Probe(ctx context.Context) error {
-	roles := []ports.ExecutableRole{ports.YTDLP, ports.Deno, ports.FFmpeg, ports.FFprobe}
-	deps := make([]contracts.Dependency, 0, len(roles))
-	var firstErr error
-	for _, role := range roles {
-		a := []string{"-version"}
-		if role == ports.YTDLP {
-			a = ytdlpVersionArgs
-		}
-		if role == ports.Deno {
-			a = []string{"--version"}
-		}
-		text, err := e.capture(ctx, ports.ExecSpec{Executable: role, Args: a})
-		version := "unavailable"
-		if err == nil {
-			version = strings.TrimSpace(strings.SplitN(text, "\n", 2)[0])
-			if len(version) > 512 {
-				version = version[:512]
-			}
-			if version == "" {
-				version = "unknown"
-			}
-		} else if firstErr == nil {
-			firstErr = err
-		}
-		deps = append(deps, contracts.Dependency{Name: string(role), Version: version, Available: err == nil})
-		if ctx.Err() != nil {
-			break
-		}
-	}
-	available := map[string]bool{}
-	for _, d := range deps {
-		available[d.Name] = d.Available
-	}
-	video := available[string(ports.FFmpeg)] && available[string(ports.FFprobe)]
-	mp3 := false
-	if video {
-		encoders, err := e.capture(ctx, ports.ExecSpec{Executable: ports.FFmpeg, Args: []string{"-hide_banner", "-encoders"}})
-		if err == nil {
-			for _, line := range strings.Split(encoders, "\n") {
-				fields := strings.Fields(line)
-				if len(fields) > 1 && fields[1] == "libmp3lame" {
-					mp3 = true
-					break
-				}
-			}
-		} else if firstErr == nil {
-			firstErr = err
-		}
-	}
-	network := false
-	if available[string(ports.YTDLP)] && available[string(ports.Deno)] && filepath.IsAbs(e.config.PrivateBinDir) && filepath.IsAbs(e.config.AnalysisRoot) {
-		dir, cleanup, err := e.onlineWork(e.config.AnalysisRoot)
-		if err == nil {
-			args := append(onlineArgs(dir, e.config.PrivateBinDir), "--extractor-args", "dwnl:mode=probe", "--skip-download", "--", "https://www.youtube.com/watch?v=dwnl-private-self-test")
-			var output string
-			output, err = e.capture(ctx, ports.ExecSpec{Executable: ports.YTDLP, Args: args, Dir: dir, Env: onlineEnvironment(dir, e.config.PrivateBinDir)})
-			network = err == nil && strings.Contains(output, "DWNL_ADAPTER_READY")
-			if !isCancelFailure(err) {
-				cleanup()
-			}
-		}
-		if err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	e.mu.Lock()
-	e.dependencies = deps
-	e.capabilities = contracts.Capabilities{Video: video, MP3: mp3, NetworkAccess: network}
-	e.mu.Unlock()
-	return firstErr
 }
