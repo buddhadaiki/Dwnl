@@ -9,6 +9,7 @@ const temporary = join(project, '.tools/tmp');
 const roots: string[] = [];
 const lock = JSON.parse(readFileSync(join(project, 'release/suppliers.lock.json'), 'utf8'));
 const fixtures = [
+  { supplier: 'yt-dlp', archive: '.tools/supplier-proof/yt-dlp-2026.08.19/yt-dlp_win.zip' },
   { supplier: 'deno', archive: '.tools/media/downloads/deno-2.9.7-windows-x64.zip' },
   { supplier: 'gyan-ffmpeg', archive: '.tools/supplier-proof/gyan-9.0.2/ffmpeg-9.0.2-essentials_build.zip' },
 ];

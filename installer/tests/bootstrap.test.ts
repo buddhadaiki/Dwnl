@@ -29,7 +29,15 @@ it('stages the helper and notices without embedding any supplier executable',()=
  expect(readFileSync(join(output,'payload/dwnl-host.exe'))).toEqual(f.pe);
  const include=readFileSync(join(output,'supplier-acquisition.iss'),'utf8');
  expect(include).toContain('https://github.com/denoland/deno/releases/download/v2.9.7/');expect(include).toContain('RequireHash(');
- expect(include).toContain('66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a');
+ // yt-dlp arrives as the official onedir ZIP; its runtime folder lands beside the executable.
+ expect(include).toContain("DownloadPage.Add('https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_win.zip', 'yt-dlp.zip', '30b4c14aafab6082becff7881e41b76df46dc43ea7633479410a91e29da492bf');");
+ expect(include).toContain("RequireHash(ExpandConstant('{app}\\bin\\yt-dlp.exe'), '25a7fd29381d2487ea8380b9fe1cff34ae5bb264bc733cfd430595bae52aa309');");
+ expect(include).toContain("RequireHash(ExpandConstant('{tmp}\\supplier-yt-dlp\\_internal\\python310.dll')");
+ expect(include).toContain("DeleteIfOwned(ExpandConstant('{app}\\bin\\_internal\\python310.dll')");
+ const removals=include.slice(include.indexOf('procedure RemoveOwnedDirectories'));
+ expect(removals.indexOf("'{app}\\bin\\_internal\\Cryptodome\\Cipher'")).toBeGreaterThan(-1);
+ expect(removals.indexOf("'{app}\\bin\\_internal\\Cryptodome\\Cipher'")).toBeLessThan(removals.indexOf("'{app}\\bin\\_internal'"));
+ expect(removals.indexOf("'{app}\\bin\\_internal'")).toBeLessThan(removals.indexOf("'{app}\\bin'"));
 });
 function desktopFixture(){
  const f=fixture();
@@ -84,8 +92,22 @@ it('fails if an official URL floats, inner hash is missing, or output already ex
  const f=fixture();const lock=join(f.root,'release/suppliers.lock.json');const content=JSON.parse(readFileSync(lock,'utf8'));
  content.suppliers[0].url=content.suppliers[0].url.replace('2026.08.19','latest');writeFileSync(lock,JSON.stringify(content));
  let result=run(`New-DwnlBootstrapStage -ProjectRoot ${quote(f.root)} -OutputRoot ${quote(join(f.root,'dist/bad'))}`);expect(result.status).not.toBe(0);expect(result.stderr).toMatch(/exact official supplier URL/);
- content.suppliers[0].url='https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe';content.suppliers[1].files[0].sha256='';writeFileSync(lock,JSON.stringify(content));
+ content.suppliers[0].url='https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_win.zip';content.suppliers[1].files[0].sha256='';writeFileSync(lock,JSON.stringify(content));
  result=run(`New-DwnlBootstrapStage -ProjectRoot ${quote(f.root)} -OutputRoot ${quote(join(f.root,'dist/bad2'))}`);expect(result.status).not.toBe(0);expect(result.stderr).toMatch(/Supplier file pin/);
+});
+it('keeps the runtime folder to yt-dlp, under bin/_internal and named after its own archive members',()=>{
+ const damages:((c:any)=>void)[]=[
+  c=>{c.suppliers.find((s:any)=>s.name==='deno').files.push({entry:'_internal/x.dll',path:'bin/_internal/x.dll',sha256:'a'.repeat(64),sizeBytes:1});},
+  c=>{c.suppliers[0].files[1].path='bin/_internal/other.pyd';},
+  c=>{c.suppliers[0].files[1].entry='_internal/../escape.pyd';c.suppliers[0].files[1].path='bin/_internal/../escape.pyd';},
+  c=>{c.suppliers[0].files[0].sizeBytes=0;},
+ ];
+ for(const [index,damage] of damages.entries()){
+  const f=fixture();const lock=join(f.root,'release/suppliers.lock.json');const content=JSON.parse(readFileSync(lock,'utf8'));
+  damage(content);writeFileSync(lock,JSON.stringify(content));
+  const result=run(`New-DwnlBootstrapStage -ProjectRoot ${quote(f.root)} -OutputRoot ${quote(join(f.root,'dist/bad'))}`);
+  expect(result.status,'damage '+index).not.toBe(0);expect(result.stderr).toMatch(/Supplier file pin/);
+ }
 });
 it('executes stage-only entrypoint without losing explicit output arguments',()=>{
  const f=fixture(); const output=join(f.root,'dist/cli-stage');

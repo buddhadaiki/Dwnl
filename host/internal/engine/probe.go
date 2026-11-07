@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,7 +17,7 @@ import (
 
 // probeRules names the checks below. Change it whenever Probe learns something
 // new, so a result saved by an older build is never reused.
-const probeRules = "dwnl-probe-2"
+const probeRules = "dwnl-probe-3"
 
 const (
 	adapterProbeURL    = "https://www.youtube.com/watch?v=dwnl-private-self-test"
@@ -170,8 +173,58 @@ func (e *Engine) ProbeIdentity() (string, error) {
 		}
 		parts = append(parts, string(role)+"="+identity)
 	}
+	runtime, err := runtimeIdentity(filepath.Join(e.config.PrivateBinDir, "_internal"))
+	if err != nil {
+		return "", err
+	}
+	parts = append(parts, "yt-dlp-runtime="+runtime)
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\n")))
 	return hex.EncodeToString(digest[:]), nil
+}
+
+// runtimeIdentity names the onedir yt-dlp runtime folder beside the
+// executable: every member's relative path, size and last write. A missing
+// folder is a valid state of its own (the single-file build has none); links
+// and other irregular members are refused.
+func runtimeIdentity(root string) (string, error) {
+	info, err := os.Lstat(root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "absent", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || linked(info) {
+		return "", errors.New("yt-dlp runtime is not a plain folder")
+	}
+	hash := sha256.New()
+	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		member, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if linked(member) || (!member.IsDir() && !member.Mode().IsRegular()) {
+			return errors.New("yt-dlp runtime holds an irregular member")
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(hash, "%s|%t|%d|%d\n", filepath.ToSlash(rel), member.IsDir(), member.Size(), member.ModTime().UnixNano())
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// linked reports links and, on Windows, junctions and other reparse points.
+func linked(info fs.FileInfo) bool {
+	return info.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0
 }
 
 // RestoreProbe adopts the result an earlier Probe reported for the same

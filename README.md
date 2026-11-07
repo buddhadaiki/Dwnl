@@ -8,7 +8,7 @@ A nova etapa oferece aplicativo Go/Wails com WebView2, fila persistente independ
 
 - [Instalação e uso desktop](release/INSTALL.desktop.pt-BR.md)
 - [Validação e medições de 19/10](docs/validation/2026-10-19-desktop.md)
-- [Inicialização mais rápida, 07/11](docs/validation/2026-11-07-startup.md): reinícios prontos em ≈60 ms (antes ≈8 s) e busca liberada durante a preparação
+- [Inicialização mais rápida, 07/11](docs/validation/2026-11-07-startup.md): reinícios prontos em ≈60 ms (antes ≈8 s), busca liberada durante a preparação e yt-dlp *onedir*, que inicia em menos de 1 s (antes ≈4 s) em cada verificação, busca e download
 - Pacote local: `pwsh -NoProfile -File ./tools/release-desktop.ps1`
 - Desenvolvimento: `pwsh -NoProfile -File ./tools/build-desktop.ps1`; use `Dwnl.exe --state-dir <pasta absoluta isolada> --bin-dir <bin privado> --destination <pasta absoluta>` para não tocar na instalação pessoal.
 
@@ -86,7 +86,7 @@ O painel pode fechar sem cancelar. A perda da conexão encerra o trabalho e seus
 
 ## Artefatos e limites
 
-O build privado da extensão fica em `dist/extension/`, e o auxiliar em `dist/helper/`. O bootstrap atual fica em `dist/bootstrap-20261017-r5-tiktok/Dwnl-Setup.exe` e contém o helper e avisos; adquire os quatro executáveis diretamente dos fornecedores oficiais, com URLs/versões/hashes fixados em `release/suppliers.lock.json`. Verifica arquivos antes de instalar e registrar o host. O build inclui o recurso privado no popup e a permissão `downloads` somente quando recebe `--installer` com um setup verificado. Esse setup foi executado e conferido no contexto real do usuário em 17/10, com três inicializações e preservação de dados verificadas na validação r5.
+O build privado da extensão fica em `dist/extension/`, e o auxiliar em `dist/helper/`. O bootstrap atual fica em `dist/bootstrap-20261017-r5-tiktok/Dwnl-Setup.exe` e contém o helper e avisos; adquire os quatro executáveis diretamente dos fornecedores oficiais (o yt-dlp na versão *onedir* `yt-dlp_win.zip`, com sua pasta `bin\_internal` fixada arquivo por arquivo), com URLs/versões/hashes fixados em `release/suppliers.lock.json`. Verifica arquivos antes de instalar e registrar o host. O build inclui o recurso privado no popup e a permissão `downloads` somente quando recebe `--installer` com um setup verificado. Esse setup foi executado e conferido no contexto real do usuário em 17/10, com três inicializações e preservação de dados verificadas na validação r5.
 
 O bundle antigo `dist/validation-reviewed-20261013/Dwnl-Validation-DO-NOT-DISTRIBUTE.exe` continua separado e bloqueado para distribuição por fonte correspondente incompleta. O bootstrap não declara fontes completas ou prontidão para distribuição pública e não embute os binários de mídia dos fornecedores.
 

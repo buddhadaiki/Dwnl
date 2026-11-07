@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,6 +19,25 @@ import (
 
 // This regression catches startup rejecting a missing private executable before
 // the real runner/engine can report that dependency through the handshake.
+func copyDependencyFile(t *testing.T, from, to string) {
+	t.Helper()
+	input, err := os.Open(from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := os.OpenFile(to, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		input.Close()
+		t.Fatal(err)
+	}
+	_, copyErr := io.Copy(output, input)
+	input.Close()
+	closeErr := output.Close()
+	if copyErr != nil || closeErr != nil {
+		t.Fatalf("copy private dependency: copy=%v close=%v", copyErr, closeErr)
+	}
+}
+
 func TestHandshakeDiagnosesMissingPrivateDependencies(t *testing.T) {
 	source := os.Getenv("DWNL_MEDIA_BIN")
 	if source == "" {
@@ -39,20 +59,26 @@ func TestHandshakeDiagnosesMissingPrivateDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range names {
-		input, err := os.Open(filepath.Join(source, name+".exe"))
+		copyDependencyFile(t, filepath.Join(source, name+".exe"), filepath.Join(bin, name+".exe"))
+	}
+	// The onedir yt-dlp loads its Python runtime from _internal beside it.
+	if info, err := os.Stat(filepath.Join(source, "_internal")); err == nil && info.IsDir() {
+		err = filepath.WalkDir(filepath.Join(source, "_internal"), func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(source, path)
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				return os.Mkdir(filepath.Join(bin, rel), 0700)
+			}
+			copyDependencyFile(t, path, filepath.Join(bin, rel))
+			return nil
+		})
 		if err != nil {
 			t.Fatal(err)
-		}
-		output, err := os.OpenFile(filepath.Join(bin, name+".exe"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-		if err != nil {
-			input.Close()
-			t.Fatal(err)
-		}
-		_, copyErr := io.Copy(output, input)
-		input.Close()
-		closeErr := output.Close()
-		if copyErr != nil || closeErr != nil {
-			t.Fatalf("copy private dependency: copy=%v close=%v", copyErr, closeErr)
 		}
 	}
 	for _, tc := range []struct {

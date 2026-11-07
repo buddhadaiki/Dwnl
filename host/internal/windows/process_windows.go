@@ -306,6 +306,16 @@ func (r *processRunner) Run(ctx context.Context, spec ports.ExecSpec, callback f
 		return result, fmt.Errorf("private executable path: %w", err)
 	}
 	defer unlockExecutable()
+	if spec.Executable == ports.YTDLP {
+		// The onedir build loads its Python runtime from _internal beside the
+		// executable. Pin that folder as well, so it cannot be swapped for a
+		// link while yt-dlp starts; the single-file build has none.
+		unlockRuntime, err := LockPath(filepath.Join(r.privateBinDir, "_internal"), true)
+		if err != nil {
+			return result, fmt.Errorf("private yt-dlp runtime: %w", err)
+		}
+		defer unlockRuntime()
+	}
 	// Version/capability probes do not need a task directory. Their omitted Dir
 	// means this fixed host-owned location; a supplied Dir still must be absolute.
 	workDir := spec.Dir

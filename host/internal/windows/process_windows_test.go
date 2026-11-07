@@ -422,6 +422,40 @@ func TestRunnerBoundsProcessLinesAndDrainsAfterOverflow(t *testing.T) {
 	}
 }
 
+func TestRunnerPinsTheYTDLPRuntimeFolderAndRefusesALinkedOne(t *testing.T) {
+	bin := fixtureBin(t)
+	runner, err := NewRunner(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(role ports.ExecutableRole) error {
+		_, err := runner.Run(context.Background(), ports.ExecSpec{Executable: role, Args: fixtureArgs("exit", "0"), Dir: bin}, nil)
+		return err
+	}
+	// The single-file build has no runtime folder; the onedir build has a real one.
+	if err := run(ports.YTDLP); err != nil {
+		t.Fatalf("without a runtime folder: %v", err)
+	}
+	runtimeDir := filepath.Join(bin, "_internal")
+	if err := os.Mkdir(runtimeDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(ports.YTDLP); err != nil {
+		t.Fatalf("with a real runtime folder: %v", err)
+	}
+	if err := os.Remove(runtimeDir); err != nil {
+		t.Fatal(err)
+	}
+	makeDependencyJunction(t, runtimeDir, t.TempDir())
+	if err := run(ports.YTDLP); err == nil || !strings.Contains(err.Error(), "private yt-dlp runtime") {
+		t.Fatalf("a linked runtime folder must be refused, got %v", err)
+	}
+	// Only yt-dlp loads code from it.
+	if err := run(ports.FFmpeg); err != nil {
+		t.Fatalf("ffmpeg must not depend on the yt-dlp runtime: %v", err)
+	}
+}
+
 func TestRunnerReportsExitCodeAndPreCanceledContext(t *testing.T) {
 	bin := fixtureBin(t)
 	runner, err := NewRunner(bin)
