@@ -12,3 +12,7 @@ __pycache__/
 
 .cache/go-build/
 .cache/gomod/
+
+# Local agent settings and the release folder stay on this machine.
+.claude/
+Releases/
