@@ -12,7 +12,9 @@ function Assert-DwnlSuppliers {
     param($Lock)
     if ($Lock.schemaVersion -ne 1 -or $Lock.mode -ne 'supplier-acquisition' -or ($Lock.suppliers.name | Sort-Object) -join ',' -ne 'deno,gyan-ffmpeg,yt-dlp') { throw 'Expected three pinned suppliers.' }
     $urls=@{
-        'yt-dlp'="https://github.com/yt-dlp/yt-dlp/releases/download/$($Lock.suppliers.Where({$_.name -eq 'yt-dlp'})[0].version)/yt-dlp.exe"
+        # The onedir build starts in under a second; the single-file yt-dlp.exe
+        # unpacks itself on every start, about 4 s.
+        'yt-dlp'="https://github.com/yt-dlp/yt-dlp/releases/download/$($Lock.suppliers.Where({$_.name -eq 'yt-dlp'})[0].version)/yt-dlp_win.zip"
         'deno'="https://github.com/denoland/deno/releases/download/v$($Lock.suppliers.Where({$_.name -eq 'deno'})[0].version)/deno-x86_64-pc-windows-msvc.zip"
         'gyan-ffmpeg'="https://github.com/GyanD/codexffmpeg/releases/download/$($Lock.suppliers.Where({$_.name -eq 'gyan-ffmpeg'})[0].version)/ffmpeg-$($Lock.suppliers.Where({$_.name -eq 'gyan-ffmpeg'})[0].version)-essentials_build.zip"
     }
@@ -21,12 +23,15 @@ function Assert-DwnlSuppliers {
         if ($supplier.version -notmatch '^\d+(\.\d+){2}$' -or $supplier.url -cne $urls[$supplier.name]) {throw 'An exact official supplier URL is required; no floating latest.'}
         if ($supplier.sha256 -notmatch '^[a-f0-9]{64}$' -or $supplier.sizeBytes -le 0 -or $supplier.archiveType -notin @('exe','zip') -or -not $supplier.files.Count -or -not $supplier.license -or -not $supplier.sourceReference) {throw 'Supplier artifact pin/license is incomplete.'}
         foreach($file in $supplier.files) {
-            if ($file.path -notmatch '^(bin/[a-z-]+\.exe|licenses/[A-Za-z0-9._-]+\.txt)$' -or $file.sha256 -notmatch '^[a-f0-9]{64}$' -or $file.sizeBytes -le 0 -or $file.sizeBytes -gt 536870912 -or $destinations.ContainsKey($file.path.ToLowerInvariant())) {throw 'Supplier file pin/destination is invalid.'}
+            # yt-dlp's onedir runtime sits in bin/_internal beside its executable,
+            # member for member, including a few empty metadata files.
+            $runtime=$supplier.name -ceq 'yt-dlp' -and $file.path -cmatch '^bin/_internal(/[A-Za-z0-9._-]+)+$' -and $file.path -notmatch '/\.\.?(/|$)' -and $file.path -ceq 'bin/'+$file.entry
+            if (($file.path -notmatch '^(bin/[a-z-]+\.exe|licenses/[A-Za-z0-9._-]+\.txt)$' -and -not $runtime) -or $file.sha256 -notmatch '^[a-f0-9]{64}$' -or $file.sizeBytes -lt 0 -or ($file.sizeBytes -eq 0 -and -not $runtime) -or $file.sizeBytes -gt 536870912 -or $destinations.ContainsKey($file.path.ToLowerInvariant())) {throw 'Supplier file pin/destination is invalid.'}
             if ($supplier.archiveType -eq 'zip' -and ($file.entry -notmatch '^[A-Za-z0-9._/-]+$' -or $file.entry -match '(^|/)\.\.(/|$)' -or $file.entry.StartsWith('/'))) {throw 'Supplier archive member is unsafe.'}
             $destinations[$file.path.ToLowerInvariant()]=$true
         }
     }
-    if (@($destinations.Keys | Where-Object {$_ -like 'bin/*'} | Sort-Object) -join ',' -ne 'bin/deno.exe,bin/ffmpeg.exe,bin/ffprobe.exe,bin/yt-dlp.exe') {throw 'Exactly four private executables must be acquired.'}
+    if (@($destinations.Keys | Where-Object {$_ -like 'bin/*' -and $_ -notlike 'bin/_internal/*'} | Sort-Object) -join ',' -ne 'bin/deno.exe,bin/ffmpeg.exe,bin/ffprobe.exe,bin/yt-dlp.exe') {throw 'Exactly four private executables must be acquired.'}
 }
 
 # Workspace validation of the same exact selected files used by the installer.

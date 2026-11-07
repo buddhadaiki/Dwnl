@@ -141,6 +141,69 @@ func TestProbeReportsAMissingExecutableAsUnavailable(t *testing.T) {
 	}
 }
 
+func TestProbeIdentityFollowsTheYTDLPRuntimeFolder(t *testing.T) {
+	root := testutil.TempDir(t)
+	bin := filepath.Join(root, "bin")
+	if err := os.Mkdir(bin, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []ports.ExecutableRole{ports.YTDLP, ports.Deno, ports.FFmpeg, ports.FFprobe} {
+		if err := os.WriteFile(filepath.Join(bin, ports.ExecutableFile(role)), []byte(role), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e, err := New(Config{HostSessionID: "session", Runner: &neverRunner{}, PrivateBinDir: bin, AnalysisRoot: filepath.Join(root, "analyses")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]string{}
+	step := func(name string) {
+		t.Helper()
+		id, err := e.ProbeIdentity()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if earlier, ok := seen[id]; ok {
+			t.Fatalf("%s kept the identity of %s", name, earlier)
+		}
+		seen[id] = name
+	}
+	step("single-file build")
+	runtimeDir := filepath.Join(bin, "_internal")
+	library := filepath.Join(runtimeDir, "lib", "module.bin")
+	if err := os.MkdirAll(filepath.Dir(library), 0700); err != nil {
+		t.Fatal(err)
+	}
+	step("empty runtime folder")
+	if err := os.WriteFile(library, []byte("one"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	step("runtime member added")
+	if err := os.WriteFile(library, []byte("longer"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	step("runtime member resized")
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(library, later, later); err != nil {
+		t.Fatal(err)
+	}
+	step("runtime member rewritten in place")
+	if err := os.Rename(library, filepath.Join(runtimeDir, "module.bin")); err != nil {
+		t.Fatal(err)
+	}
+	step("runtime member moved")
+	// Windows may finish deleting a just-scanned member a moment later.
+	if err := testutil.RetryDirectoryNotEmpty(func() error { return os.RemoveAll(runtimeDir) }); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(runtimeDir, []byte("not a folder"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.ProbeIdentity(); err == nil {
+		t.Fatal("identity with a file named _internal")
+	}
+}
+
 func TestProbeIdentityFollowsTheInstalledExecutables(t *testing.T) {
 	root := testutil.TempDir(t)
 	bin := filepath.Join(root, "bin")
