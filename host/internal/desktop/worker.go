@@ -232,6 +232,7 @@ func (s *Service) execute(ctx context.Context, r queuedRecord) {
 			err = &contracts.ProtocolError{Code: contracts.InvalidOutput, Message: "O arquivo final não pôde ser verificado."}
 		}
 	}
+	s.forgetProbe(err)
 	var protocol *contracts.ProtocolError
 	unconfirmed := errors.As(err, &protocol) && protocol.Code == contracts.CancelFailed
 	var cleanupErr error

@@ -30,6 +30,10 @@ type MediaEngine interface {
 	Probe(context.Context) error
 	Capabilities() contracts.Capabilities
 	Dependencies() []contracts.Dependency
+	// ProbeIdentity and RestoreProbe let a start reuse the last complete probe
+	// while the installed dependencies are unchanged.
+	ProbeIdentity() (string, error)
+	RestoreProbe(contracts.Capabilities, []contracts.Dependency)
 	SelectionIdentity(analysisID, itemID, optionID string) (string, error)
 }
 
@@ -187,39 +191,6 @@ func New(config Config) (*Service, error) {
 	go s.worker()
 	success = true
 	return s, nil
-}
-
-func (s *Service) probe(timeout time.Duration) {
-	defer s.wg.Done()
-	// Only snapshot is served during recovery; hashes and file identity checks
-	// run outside the mutex so an already running UI can connect immediately.
-	recoveryErr := s.recover()
-	ctx, cancel := context.WithTimeout(s.ctx, timeout)
-	defer cancel()
-	err := s.engine.Probe(ctx)
-	s.mu.Lock()
-	if recoveryErr != nil {
-		s.persistFailure(recoveryErr)
-	}
-	if saveErr := s.persist(); saveErr != nil {
-		s.persistFailure(saveErr)
-	}
-	s.capabilities = s.engine.Capabilities()
-	s.dependencies = s.engine.Dependencies()
-	if s.dependencies == nil {
-		s.dependencies = []contracts.Dependency{}
-	}
-	if err != nil {
-		s.readiness = "degraded"
-		s.warning = strings.TrimSpace(s.warning + " Preparação incompleta: " + safeError(err))
-	} else {
-		s.readiness = "ready"
-		if s.blocked {
-			s.readiness = "degraded"
-		}
-	}
-	s.mu.Unlock()
-	s.signal()
 }
 
 func (s *Service) signal() {

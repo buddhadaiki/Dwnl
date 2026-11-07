@@ -31,12 +31,23 @@ type fakeEngine struct {
 	analyzeErr, identityErr            error
 	changed                            bool
 	identities                         map[string]string
+	// installed is the ProbeIdentity; probes and restores count each way a
+	// start settled its dependency check.
+	installed        string
+	installedErr     error
+	probes, restores int
 }
 
+// fixtureInstall is the ProbeIdentity of an unchanged fixture installation.
+var fixtureInstall = strings.Repeat("ab", 32)
+
 func newFake() *fakeEngine {
-	return &fakeEngine{gate: make(chan struct{}, 20), started: make(chan string, 20), identities: map[string]string{}}
+	return &fakeEngine{gate: make(chan struct{}, 20), started: make(chan string, 20), identities: map[string]string{}, installed: fixtureInstall}
 }
 func (f *fakeEngine) Probe(ctx context.Context) error {
+	f.mu.Lock()
+	f.probes++
+	f.mu.Unlock()
 	if f.probeGate != nil {
 		select {
 		case <-f.probeGate:
@@ -46,10 +57,23 @@ func (f *fakeEngine) Probe(ctx context.Context) error {
 	}
 	return f.probeErr
 }
+func (f *fakeEngine) ProbeIdentity() (string, error) { return f.installed, f.installedErr }
+func (f *fakeEngine) RestoreProbe(contracts.Capabilities, []contracts.Dependency) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.restores++
+}
+func (f *fakeEngine) probeCounts() (probes, restores int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.probes, f.restores
+}
 func (f *fakeEngine) Capabilities() contracts.Capabilities {
 	return contracts.Capabilities{Video: true, MP3: true, NetworkAccess: true}
 }
-func (f *fakeEngine) Dependencies() []contracts.Dependency { return nil }
+func (f *fakeEngine) Dependencies() []contracts.Dependency {
+	return []contracts.Dependency{{Name: "yt-dlp", Version: "fixture", Available: true}, {Name: "deno", Version: "fixture", Available: true}, {Name: "ffmpeg", Version: "fixture", Available: true}, {Name: "ffprobe", Version: "fixture", Available: true}}
+}
 func (f *fakeEngine) Analyze(ctx context.Context, url string) (contracts.Analysis, error) {
 	if err := ctx.Err(); err != nil {
 		return contracts.Analysis{}, err

@@ -32,6 +32,7 @@ from yt_dlp.extractor.twitter import TwitterIE
 from yt_dlp.networking.common import RequestHandler, Response, _REQUEST_HANDLERS
 from yt_dlp.networking.exceptions import RequestError, TransportError, HTTPError
 from yt_dlp.utils import ExtractorError
+from yt_dlp.version import __version__ as YT_DLP_VERSION
 
 __all__ = ['DwnlIE']
 HOSTS = {
@@ -879,7 +880,8 @@ class DwnlIE(InfoExtractor):
         if mode == 'probe':
             if url != 'https://www.youtube.com/watch?v=dwnl-private-self-test':
                 raise policy_error('invalid adapter probe')
-            self.to_screen('DWNL_ADAPTER_READY')
+            # The version spares the host a second start of the packed yt-dlp.
+            self.to_screen(f'DWNL_ADAPTER_READY {YT_DLP_VERSION}')
             return {'id': 'dwnl-private-self-test', 'title': 'Private adapter self test', 'url': url, 'ext': 'mp4'}
         if mode not in ('analyze', 'download'):
             raise ExtractorError('DWNL_INVALID_SELECTION: unsupported host operation', expected=True)

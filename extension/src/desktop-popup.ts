@@ -10,18 +10,22 @@ export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => voi
   const url = element<HTMLInputElement>('url'), quality = element<HTMLSelectElement>('quality'), mode = element<HTMLSelectElement>('mode'), itemSelect = element<HTMLSelectElement>('item');
   let snapshot: DesktopSnapshot | undefined, analysis: Analysis | undefined, pending: EnqueuePayload | undefined;
   let busy = false, refreshing = false, stopped = false, connected = false, timer: ReturnType<typeof setTimeout> | undefined;
+  // The readiness the quality block was drawn with: capabilities are known only after preparing.
+  let qualityReadiness: DesktopSnapshot['readiness'] | undefined;
   const listeners: (() => void)[] = [];
   const on = (id: string, event: string, action: (event: Event) => void) => { const node = element(id); node.addEventListener(event, action); listeners.push(() => node.removeEventListener(event, action)); };
   const feedback = (text: string, error = false) => { const node = element('feedback'); node.textContent = text; node.hidden = !text; node.dataset.error = String(error); };
   const current = (): MediaItem | undefined => analysis?.items.find(item => item.itemId === itemSelect.value);
   // 'degraded' still serves requests; the app checks each capability itself.
   const ready = () => connected && !!snapshot && snapshot.readiness !== 'preparing';
+  // A search reads no queue state, so the app answers it while it prepares.
+  const searchable = () => connected && !!snapshot;
   function controls(): void {
     const disabled = busy || !!pending;
-    element<HTMLButtonElement>('analyze').disabled = !ready() || disabled;
+    element<HTMLButtonElement>('analyze').disabled = !searchable() || disabled;
     element<HTMLButtonElement>('current-tab').disabled = disabled;
     element<HTMLButtonElement>('choose-destination').disabled = !connected || disabled;
-    element<HTMLButtonElement>('more-formats').disabled = !ready() || disabled;
+    element<HTMLButtonElement>('more-formats').disabled = !searchable() || disabled;
     element<HTMLButtonElement>('open-app').disabled = busy;
     element<HTMLButtonElement>('continue').disabled = busy || !ready();
     url.disabled = disabled; mode.disabled = disabled; quality.disabled = disabled; itemSelect.disabled = disabled;
@@ -52,11 +56,14 @@ export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => voi
       (progress.firstElementChild as HTMLElement).style.transform = percent === undefined ? '' : 'scaleX(' + percent / 100 + ')';
       element('continue').hidden = !snapshot.paused || queued === 0;
       if (snapshot.error && !busy) feedback(snapshot.error, true);
+      // A search shown while the app prepared offers MP3 once it is known.
+      if (analysis && qualityReadiness === 'preparing' && snapshot.readiness !== 'preparing') renderQuality(quality.value);
     }
     controls();
   }
   function renderQuality(selected?: string): void {
     const item = current(); quality.replaceChildren();
+    qualityReadiness = snapshot?.readiness;
     if (!item) return;
     element('media-title').textContent = item.title;
     const mp3Option = mode.querySelector<HTMLOptionElement>('option[value="mp3"]')!;
@@ -155,8 +162,11 @@ export function mountDesktopPopup(doc: Document, browser: BrowserAPI): () => voi
     finally { busy = false; controls(); }
     if (stopped) return;
     await refresh();
-    const poll = async () => { if (stopped) return; if (connected && !busy) await refresh(); timer = setTimeout(() => { void poll(); }, snapshot?.readiness === 'preparing' ? 1000 : 2500); };
-    timer = setTimeout(() => { void poll(); }, 1000);
+    // Preparing takes seconds at most; following it closely unlocks
+    // "Adicionar à fila" as soon as the app is ready.
+    const preparing = () => snapshot?.readiness === 'preparing';
+    const poll = async () => { if (stopped) return; if (connected && !busy) await refresh(); timer = setTimeout(() => { void poll(); }, preparing() ? 250 : 2500); };
+    timer = setTimeout(() => { void poll(); }, preparing() ? 250 : 1000);
   }
   void initialize();
   return () => { stopped = true; if (timer) clearTimeout(timer); client.disconnect(); for (const remove of listeners) remove(); };

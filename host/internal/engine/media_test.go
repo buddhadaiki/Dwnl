@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -25,11 +26,15 @@ import (
 // Object behavior is tested in T3; these tests exercise real media processing.
 type realRunner struct {
 	bin   string
+	mu    sync.Mutex
 	specs []ports.ExecSpec
 }
 
 func (r *realRunner) Run(ctx context.Context, s ports.ExecSpec, emit func(ports.ProcessLine)) (ports.ProcessResult, error) {
+	// Probe runs its checks concurrently.
+	r.mu.Lock()
 	r.specs = append(r.specs, s)
+	r.mu.Unlock()
 	cmd := exec.CommandContext(ctx, filepath.Join(r.bin, ports.ExecutableFile(s.Executable)), s.Args...)
 	cmd.Dir = s.Dir
 	cmd.Env = s.Env

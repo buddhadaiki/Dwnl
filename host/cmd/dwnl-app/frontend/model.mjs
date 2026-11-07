@@ -101,8 +101,16 @@ export function isVideoURL(value) {
 
 export function pollDelay(snapshot, failures = 0, waitingForExtension = false) {
   if (failures) return Math.min(30000, 2000 * 2 ** Math.min(failures, 4));
-  if (snapshot?.readiness === 'preparing' || snapshot?.tasks?.some(t => activeStates.has(t.state))) return 1000;
+  // Preparing takes seconds at most; following it closely unlocks Baixar at once.
+  if (snapshot?.readiness === 'preparing') return 250;
+  if (snapshot?.tasks?.some(t => activeStates.has(t.state))) return 1000;
   return waitingForExtension ? 2000 : 8000;
+}
+
+// While the app prepares, its capabilities are not known yet rather than
+// missing: a search that finishes first must not pick MP3 or report "no video".
+export function capability(snapshot, name) {
+  return snapshot?.readiness === 'preparing' || Boolean(snapshot?.capabilities?.[name]);
 }
 
 // A failed or canceled download can start over from its link; '' when it cannot.

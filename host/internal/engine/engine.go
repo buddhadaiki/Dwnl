@@ -117,6 +117,14 @@ func (e *Engine) run(ctx context.Context, spec ports.ExecSpec, line func(ports.P
 		if noSpace.Load() {
 			return protocolError(contracts.DiskFull, "The media disk has no space left.")
 		}
+		// Runners report -1 until a process exits; with an error, it never ran:
+		// the executable is missing, blocked or could not be started.
+		if result.ExitCode == -1 && err != nil {
+			if diskFull(err) {
+				return protocolError(contracts.DiskFull, "The media disk has no space left.")
+			}
+			return protocolError(contracts.DependencyUnavailable, "A private media dependency could not be executed.")
+		}
 		return protocolError(contracts.EngineError, "The media dependency could not process this input.")
 	}
 	if err != nil {
