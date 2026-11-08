@@ -91,28 +91,28 @@ function InstallationProblem(InstallRoot, ExpectedRoot: string; HasRegistration:
 begin
   Result := '';
   if CompareText(InstallRoot, ExpectedRoot) <> 0 then begin
-    Result := 'Dwnl installs only in its fixed per-user directory.'; Exit;
+    Result := 'O Dwnl só é instalado na pasta dele, dentro do seu usuário do Windows.'; Exit;
   end;
   if IsReparsePath(InstallRoot) then begin
-    Result := 'Dwnl refuses reparse paths.'; Exit;
+    Result := 'O Dwnl não aceita atalhos de pasta (pontos de nova análise) no caminho de instalação.'; Exit;
   end;
   if FileExists(InstallRoot) then begin
-    Result := 'The Dwnl installation path is not a directory.'; Exit;
+    Result := 'O caminho de instalação do Dwnl não é uma pasta.'; Exit;
   end;
   if (GetFileAttributesW(AddBackslash(InstallRoot) + OwnerFileName) <> InvalidFileAttributes) and
      not OwnerMatchesFor(InstallRoot) then begin
-    Result := 'The Dwnl ownership marker does not match this installation. Its files were preserved.'; Exit;
+    Result := 'A marca de instalação do Dwnl não corresponde a esta pasta. Os arquivos foram preservados.'; Exit;
   end;
   if (GetFileAttributesW(AddBackslash(InstallRoot) + 'native-host.json') <> InvalidFileAttributes) and
      not ManifestMatchesFor(InstallRoot) then begin
-    Result := 'An existing native manifest is not owned by this Dwnl setup.'; Exit;
+    Result := 'Já existe uma configuração de conexão com o Chrome que não pertence a este instalador.'; Exit;
   end;
   if HasRegistration and not RegistrationMatchesFor(InstallRoot, Registered) then begin
-    Result := 'An existing native-host registration is not owned by this Dwnl setup.'; Exit;
+    Result := 'Já existe um registro de conexão com o Chrome que não pertence a este instalador.'; Exit;
   end;
   if DirExists(InstallRoot) and not OwnerMatchesFor(InstallRoot) and
      not (HasRegistration and RegistrationMatchesFor(InstallRoot, Registered)) then
-    Result := 'An existing Dwnl directory could not be proven owned. Its files were preserved.';
+    Result := 'Não foi possível confirmar que a pasta do Dwnl pertence a esta instalação. Os arquivos foram preservados.';
 end;
 
 function PrepareOwnedDirectory(InstallRoot, ExpectedRoot: string; HasRegistration: Boolean;
@@ -126,17 +126,17 @@ begin
   // If another directory appeared since validation, CREATE_DIRECTORY fails rather
   // than letting the new directory inherit our ownership claim.
   if not HadDirectory and not CreateDirectoryW(InstallRoot, 0) then begin
-    Result := 'The Dwnl installation directory could not be created.'; Exit;
+    Result := 'Não foi possível criar a pasta de instalação do Dwnl.'; Exit;
   end;
   if IsReparsePath(InstallRoot) then begin
-    Result := 'Dwnl refuses reparse paths.'; Exit;
+    Result := 'O Dwnl não aceita atalhos de pasta (pontos de nova análise) no caminho de instalação.'; Exit;
   end;
   // CREATE_NEW never overwrites another marker. Persist before the first payload copy
   // so a failed install can be retried without deleting state or trusting its name.
   Handle := CreateFileW(AddBackslash(InstallRoot) + OwnerFileName, GenericWrite,
     0, 0, CreateNew, FileAttributeNormal, 0);
   if Handle = InvalidHandleValue then begin
-    Result := 'A new Dwnl ownership marker could not be created.'; Exit;
+    Result := 'Não foi possível criar a marca de instalação do Dwnl.'; Exit;
   end;
   Bytes := UTF8Encode(ExpectedOwnerFor(InstallRoot));
   Written := 0;
@@ -147,7 +147,7 @@ begin
     CloseHandle(Handle);
   end;
   if not Saved or not OwnerMatchesFor(InstallRoot) then
-    Result := 'The Dwnl ownership marker could not be verified. No registration was created.';
+    Result := 'Não foi possível conferir a marca de instalação do Dwnl. Nada foi registrado.';
 end;
 
 function DeleteOwnedManifestFor(InstallRoot, Registered: string): Boolean;
