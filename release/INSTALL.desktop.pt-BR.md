@@ -1,4 +1,4 @@
-# Dwnl 0.4.0 — aplicativo Windows e extensão auxiliar
+# Dwnl 0.4.1 — aplicativo Windows e extensão auxiliar
 
 ## Instalar
 
@@ -36,4 +36,4 @@ Remova a extensão em `chrome://extensions` e desinstale **Dwnl** pelos aplicati
 
 Windows x64 primeiro. Os pacotes Ubuntu e o modo legado continuam separados. Vídeos individuais, incluindo Shorts/Reels; playlists/canais não fazem parte desta etapa. Disponibilidade depende do site e vídeo.
 
-Foi exercitado download real de Shorts, recuperação da fila após encerramento forçado, janela nativa, IPC e ponte Native Messaging em processo isolado. A instalação pessoal e o carregamento no Chrome pessoal não foram alterados. Consulte `docs/validation/2026-10-19-desktop.md`, `docs/validation/2026-11-07-startup.md` e `docs/validation/2026-11-07-updates.md` no código para medições, testes e limites da validação.
+Foi exercitado download real de Shorts, recuperação da fila após encerramento forçado, janela nativa, IPC e ponte Native Messaging em processo isolado. A instalação pessoal e o carregamento no Chrome pessoal não foram alterados. Consulte `docs/validation/2026-10-19-desktop.md`, `docs/validation/2026-11-07-startup.md`, `docs/validation/2026-11-07-updates.md` e `docs/validation/2026-11-08-installer.md` no código para medições, testes e limites da validação.
