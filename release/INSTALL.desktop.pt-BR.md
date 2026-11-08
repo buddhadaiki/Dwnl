@@ -4,7 +4,7 @@
 
 1. Execute `Dwnl-Setup.exe`. O instalador é por usuário, não exige administrador e baixa as versões verificadas de yt-dlp, Deno e FFmpeg. Precisa de internet. Ele instala o aplicativo e a extensão do Chrome juntos.
 2. Abra **Dwnl** pelo menu Iniciar. Cole um link e escolha o formato; o aplicativo funciona sem extensão.
-3. Para baixar direto do Chrome, clique em **Conectar ao Chrome** no aplicativo (ou em Configurações → Extensão do Chrome) e siga os passos. O Chrome só aceita extensões de fora da Chrome Web Store por um passo manual, feito uma vez: em `chrome://extensions`, ative **Modo do desenvolvedor**, clique em **Carregar sem compactação** e escolha `%LOCALAPPDATA%\Dwnl\extension`. Ao abrir o painel do Dwnl no Chrome, o aplicativo marca a extensão como conectada.
+3. Para baixar direto do Chrome, clique em **Conectar ao Chrome** no aplicativo (ou em Configurações → Extensão do Chrome) e siga os passos. O Chrome só aceita extensões de fora da Chrome Web Store por um passo manual, feito uma vez: em `chrome://extensions`, ative **Modo do desenvolvedor**, clique em **Carregar sem compactação** e escolha `%LOCALAPPDATA%\Dwnl\extension`. Ao abrir o painel do Dwnl no Chrome, o aplicativo mostra a extensão como conectada. Ele só mostra isso quando a extensão falou com ele desde que foi aberto; antes disso, mostra a data da última conexão.
 4. Se uma versão anterior da extensão estava carregada de outra pasta, remova-a em `chrome://extensions` antes de carregar a da pasta do Dwnl.
 
 É necessário Microsoft Edge WebView2 Runtime (Evergreen). O setup detecta ausência antes de baixar os componentes e informa o endereço oficial de instalação: https://developer.microsoft.com/microsoft-edge/webview2/ . O runtime é compartilhado com outros aplicativos; nenhum Chromium completo é incluído no pacote.
@@ -26,7 +26,7 @@ O setup não possui assinatura digital. Compare `SHA256SUMS.txt` antes de execut
 
 Para atualizar, abra **Configurações** e clique em **Buscar atualizações**. Se houver uma versão nova, **Atualizar** baixa o instalador do GitHub, confere os hashes e fecha o Dwnl; a instalação começa e, ao terminar, abre o Dwnl de novo. O Dwnl só consulta o GitHub quando você clica.
 
-Também dá para executar um instalador novo por cima. Se o Dwnl estiver aberto, o instalador pede que ele feche, como **Sair**, e pergunta antes quando há um download em andamento, que volta para a fila. Nenhum processo é encerrado à força. A versão 0.3.0 ainda não atende a esse pedido: feche-a pelo **Sair** quando o instalador avisar.
+Também dá para executar um instalador novo por cima. Se o Dwnl estiver aberto, o instalador pede que ele feche, como **Sair**, e pergunta antes quando há um download em andamento, que volta para a fila. Se algo continuar aberto (a versão 0.3.0, que não atende a esse pedido, ou o painel do Dwnl aberto no Chrome), o instalador oferece **Fechar o Dwnl**, que encerra o que está rodando da pasta do Dwnl, ou **Tentar de novo**, depois de você usar **Sair**.
 
 O app e a extensão são atualizados juntos, na mesma pasta. A extensão se recarrega sozinha depois que o painel fecha; se ainda mostrar a versão anterior, clique em **Recarregar** no cartão do Dwnl em `chrome://extensions`. Preserve uma cópia do diretório de estado antes de voltar à versão anterior.
 

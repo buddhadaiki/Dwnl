@@ -27,7 +27,19 @@ RestartApplications=no
 ChangesEnvironment=no
 Uninstallable=yes
 SetupLogging=yes
-WizardStyle=modern
+; Follows the Windows light or dark setting, as the app does. The images come
+; from docs/branding/dwnl-logo.png through tools/installer-art.py.
+WizardStyle=modern dynamic windows11
+SetupIconFile=assets\dwnl.ico
+WizardSmallImageFile=assets\dwnl-small-*.png
+WizardImageFile=assets\dwnl-side-light-*.png
+WizardImageFileDynamicDark=assets\dwnl-side-dark-*.png
+#ifdef DesktopApp
+UninstallDisplayIcon={app}\Dwnl.exe
+#endif
+
+[Languages]
+Name: "ptbr"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Files]
 #include PackageRoot + "\payload-files.iss"
@@ -49,6 +61,7 @@ const
   NativeKey = 'Software\Google\Chrome\NativeMessagingHosts\com.dwnl.host';
 
 #include "bootstrap-ownership.iss"
+#include "bootstrap-processes.iss"
 
 procedure InitializeWizard();
 begin
@@ -109,31 +122,51 @@ begin
 end;
 #endif
 
-// Closes a running Dwnl before its files are replaced or removed. No process
-// is terminated: Dwnl is asked to quit and exits on its own.
+// Closes a running Dwnl before its files are replaced or removed. Dwnl is
+// first asked to quit, saving its queue. What still runs from the installation
+// (a Dwnl too old to be asked, the Chrome bridge of an open extension panel)
+// is ended only when the person chooses Fechar o Dwnl.
 function CloseRunningDwnl(Action: string): Boolean;
+var Choice: Integer;
+#ifdef DesktopApp
+  Code: Integer;
+#endif
 begin
   Result := OwnedFilesInactive();
   if Result then Exit;
 #ifdef DesktopApp
   // An update started from the app is already closing it.
   if WaitForOwnedFilesInactive(3) then begin Result := True; Exit; end;
-  if AskDwnlToQuit(False) = 3 then begin
-    if SuppressibleMsgBox('Um download está em andamento no Dwnl. Fechar o Dwnl agora para ' + Action + '? O download para e volta para a fila.',
-      mbConfirmation, MB_YESNO, IDNO) <> IDYES then Exit;
-    AskDwnlToQuit(True);
+  Code := AskDwnlToQuit(False);
+  if Code = 3 then begin
+    if SuppressibleTaskDialogMsgBox('Um download está em andamento',
+      'Para ' + Action + ', o Dwnl precisa fechar. O download para agora e volta para a fila.',
+      mbConfirmation, MB_YESNO, ['Fechar o Dwnl', 'Agora não'], 0, IDNO) <> IDYES then Exit;
+    Code := AskDwnlToQuit(True);
   end;
+  if (Code = 0) and WaitForOwnedFilesInactive(5) then begin Result := True; Exit; end;
 #endif
   repeat
-    if WaitForOwnedFilesInactive(15) then begin Result := True; Exit; end;
-  until SuppressibleMsgBox('O Dwnl ainda está aberto. Use Sair no ícone do Dwnl na bandeja e feche o painel da extensão no Chrome. Depois clique em Repetir.',
-    mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY;
+    Choice := SuppressibleTaskDialogMsgBox('O Dwnl ainda está aberto',
+      'Para ' + Action + ', o Dwnl e a conexão dele com o Chrome precisam fechar.',
+      mbInformation, MB_YESNOCANCEL, ['Fechar o Dwnl'#13#10'Fecha agora. Um download em andamento para e volta para a fila.',
+       'Tentar de novo'#13#10'Depois de usar Sair no ícone do Dwnl na bandeja e fechar o painel do Dwnl no Chrome.',
+       'Cancelar'], 0, IDCANCEL);
+    if Choice = IDCANCEL then Exit;
+    if Choice = IDYES then begin
+#ifdef DesktopApp
+      if (AskDwnlToQuit(True) = 0) and WaitForOwnedFilesInactive(5) then begin Result := True; Exit; end;
+#endif
+      EndProcessesIn(ExpandConstant('{app}'));
+    end;
+    if WaitForOwnedFilesInactive(10) then begin Result := True; Exit; end;
+  until False;
 end;
 
 procedure RequireHash(Path, Expected: string);
 begin
   if IsReparsePath(Path) or not FileExists(Path) or (CompareText(GetSHA256OfFile(Path), Expected) <> 0) then
-    RaiseException('A pinned Dwnl supplier/payload hash did not match. No registration was created.');
+    RaiseException('Um arquivo baixado não confere com o hash esperado. Nada foi registrado.');
 end;
 
 #include PackageRoot + "\supplier-acquisition.iss"
@@ -190,7 +223,7 @@ begin
   VerifyInstalledPayload();
   ManifestPath := ExpandConstant('{app}\native-host.json');
   if not SaveStringToFile(ManifestPath, UTF8Encode(ExpectedManifest()), False) then
-    RaiseException('Native manifest write failed; registration was not created.');
+    RaiseException('Não foi possível gravar a configuração da conexão com o Chrome. Nada foi registrado.');
   if not RegWriteStringValue(HKCU, NativeKey, '', ManifestPath) then begin
     // Compensate only a new manifest/registration still matching our write.
     // Preserve an existing working installation and third-party replacements.
@@ -201,7 +234,7 @@ begin
       if not NativeKeyExisted then RegDeleteKeyIfEmpty(HKCU, NativeKey);
       CompensateNewManifestFor(ExpandConstant('{app}'), WasOwnedInstallation);
     end;
-    RaiseException('Native-host registration failed.');
+    RaiseException('Não foi possível registrar a conexão com o Chrome.');
   end;
 end;
 

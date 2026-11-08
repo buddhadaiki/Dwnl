@@ -1,5 +1,5 @@
 import {afterEach,expect,it} from 'vitest';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,cpSync,rmSync,realpathSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,cpSync,rmSync,realpathSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve,sep} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -131,8 +131,22 @@ it('asks a running Dwnl to quit before replacing or removing it, and reopens it 
  expect(prepare.match(/CloseRunningDwnl\('atualizar'\)/g)).toHaveLength(2);
  expect(prepare).not.toContain('OwnedFilesInactive()');
  expect(script.slice(script.indexOf('function InitializeUninstall'))).toContain("Result := CloseRunningDwnl('desinstalar');");
- // A download in progress is closed only on the person's yes, and nothing is killed.
+ // A download in progress is closed only on the person's yes.
  const close=script.slice(script.indexOf('function CloseRunningDwnl'),script.indexOf('procedure RequireHash'));
- expect(close).toMatch(/AskDwnlToQuit\(False\) = 3[\s\S]*MB_YESNO, IDNO\) <> IDYES then Exit;\s*AskDwnlToQuit\(True\);/);
+ expect(close).toMatch(/Code := AskDwnlToQuit\(False\);\s*if Code = 3 then begin[\s\S]*MB_YESNO, \['Fechar o Dwnl', 'Agora não'\], 0, IDNO\) <> IDYES then Exit;\s*Code := AskDwnlToQuit\(True\);/);
+ // What still runs is ended only on Fechar o Dwnl; silent runs cancel instead.
+ expect(close).toMatch(/'Fechar o Dwnl'#13#10'[^']*',\s*'Tentar de novo'#13#10'[^']*',\s*'Cancelar'\], 0, IDCANCEL\);\s*if Choice = IDCANCEL then Exit;\s*if Choice = IDYES then begin[\s\S]*EndProcessesIn\(ExpandConstant\('\{app\}'\)\);\s*end;/);
+ expect(script.match(/EndProcessesIn\(/g)).toHaveLength(1);
  expect(script).not.toMatch(/taskkill|TerminateProcess/i);
+});
+it('looks like Dwnl: Portuguese, light or dark as Windows, and the Dwnl images',()=>{
+ const script=readFileSync(join(project,'installer/bootstrap.iss'),'utf8');
+ expect(script).toMatch(/^WizardStyle=modern dynamic windows11\r?$/m);
+ expect(script).toMatch(/^Name: "ptbr"; MessagesFile: "compiler:Languages\\BrazilianPortuguese\.isl"\r?$/m);
+ const images: Record<string, number> = {};
+ for (const [, directive, pattern] of script.matchAll(/^(SetupIconFile|WizardSmallImageFile|WizardImageFile|WizardImageFileDynamicDark)=assets\\(\S+)\r?$/gm)) {
+  const matcher = new RegExp('^' + pattern.replaceAll('.', '\\.').replaceAll('*', '.*') + '$');
+  images[directive] = readdirSync(join(project, 'installer/assets')).filter(name => matcher.test(name)).length;
+ }
+ expect(images).toEqual({ SetupIconFile: 1, WizardSmallImageFile: 7, WizardImageFile: 7, WizardImageFileDynamicDark: 7 });
 });
