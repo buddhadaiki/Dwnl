@@ -5,13 +5,12 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"dwnl/host/internal/desktop"
 	"dwnl/host/internal/desktopipc"
+	"dwnl/host/internal/update"
 	hostwin "dwnl/host/internal/windows"
 	"embed"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -49,6 +48,10 @@ type App struct {
 	development   bool
 	quitting      atomic.Bool
 	extensionSeen atomic.Bool
+	updates       update.Source
+	updateMu      sync.Mutex
+	release       *update.Release
+	installing    bool
 }
 
 func main() {
@@ -72,8 +75,10 @@ func run() error {
 	bin := flag.String("bin-dir", filepath.Join(filepath.Dir(exe), "bin"), "Executáveis privados")
 	destination := flag.String("destination", defaultDestination, "Destino inicial")
 	background := flag.Bool("background", false, "Iniciar na bandeja")
+	quit := flag.Bool("quit", false, "Fechar o Dwnl aberto, como Sair (usado pelo instalador)")
+	force := flag.Bool("force", false, "Com --quit, fechar mesmo com um download em andamento")
 	flag.Parse()
-	if flag.NArg() != 0 {
+	if flag.NArg() != 0 || (*force && !*quit) {
 		return errors.New("argumentos desconhecidos")
 	}
 	for _, p := range []string{*state, *bin, *destination} {
@@ -85,8 +90,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	hash := sha256.Sum256([]byte(address))
-	lease, busy, err := hostwin.AcquireLease("desktop-"+hex.EncodeToString(hash[:8]), false)
+	instance := instanceScope(address)
+	if *quit {
+		// The installer reads the exit code; no window or dialog is shown.
+		os.Exit(closeRunning(*state, instance, *force, 30*time.Second))
+	}
+	lease, busy, err := hostwin.AcquireLease(instance, false)
 	if err != nil {
 		return err
 	}
@@ -110,12 +119,17 @@ func run() error {
 		}
 	}
 	defer lease.Close()
+	quitSignal, err := hostwin.CreateSignal(quitScope(instance))
+	if err != nil {
+		return err
+	}
+	defer quitSignal.Close()
 	service, err := desktop.New(desktop.Config{StateRoot: *state, BinDir: *bin, DefaultDestination: *destination})
 	if err != nil {
 		return err
 	}
 	defer service.Close()
-	app := &App{service: service, ready: make(chan struct{}), stop: make(chan struct{}), executable: exe, stateRoot: *state, development: !equalPath(*state, defaultState)}
+	app := &App{service: service, ready: make(chan struct{}), stop: make(chan struct{}), executable: exe, stateRoot: *state, development: !equalPath(*state, defaultState), updates: update.GitHub()}
 	server, err := desktopipc.Listen(*state, func(ctx context.Context, method string, payload json.RawMessage) (any, error) {
 		if fromExtension(desktopipc.RequestID(ctx)) {
 			app.extensionConnected()
@@ -126,6 +140,16 @@ func run() error {
 		return err
 	}
 	defer server.Close()
+	// The installer raises this signal before it replaces the installation.
+	go func() {
+		if quitSignal.Wait(app.stop) {
+			select {
+			case <-app.ready:
+				app.quit()
+			case <-app.stop:
+			}
+		}
+	}()
 	frontend, err := fs.Sub(assets, "frontend")
 	if err != nil {
 		return err

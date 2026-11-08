@@ -1,4 +1,4 @@
-import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyFinished, listLayout, appendChoices, isVideoURL, pollDelay, capability, showExtensionCard, retryLabel} from './model.mjs';
+import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyFinished, listLayout, appendChoices, isVideoURL, pollDelay, capability, showExtensionCard, retryLabel, updateView, downloadInProgress} from './model.mjs';
 
 const $ = id => document.getElementById(id);
 const state = {snapshot:null, analysis:null, item:null, view:'queue', analyzing:false, enqueuing:false, loadingFormats:false, requestId:null, requestKey:null, failures:0, pollTimer:null, refreshing:false, selectionVersion:0, exiting:false, archiving:false, seen:null, toastTask:null, toastTimer:null, pastedWhileAnalyzing:false, analyzeWhenReady:false, retryMode:null, extensionDismissed:false, copyTimer:null, removeId:null, removing:false, renameId:null, renaming:false, layout:null, finishing:new Set(), transition:null, landing:null};
@@ -589,6 +589,64 @@ $('exit-button').addEventListener('click', async () => {
   }
 });
 
+
+// Updates run in the window only: GitHub is asked when the person clicks.
+const updates = {info: null};
+function renderUpdate() {
+  const view = updateView(updates.info), button = $('update-button');
+  $('update-status').textContent = view.status;
+  $('update-notes').hidden = !view.notes;
+  button.textContent = view.action === 'install' ? 'Atualizar' : 'Buscar atualizações';
+  button.classList.toggle('primary', view.action === 'install');
+}
+$('update-button').addEventListener('click', async () => {
+  if (updateView(updates.info).action === 'install') {
+    $('update-title').textContent = `Atualizar para o Dwnl ${updates.info.latest}?`;
+    $('update-busy').hidden = !downloadInProgress(state.snapshot);
+    notice('update-error', null);
+    $('update-dialog').showModal();
+    return;
+  }
+  const button = $('update-button');
+  button.disabled = true;
+  button.textContent = 'Buscando…';
+  notice('settings-error', null);
+  try {
+    const check = window.go?.main?.App?.CheckForUpdate;
+    if (typeof check !== 'function') throw new Error('Esta ação não está disponível. Feche e abra o Dwnl novamente.');
+    updates.info = await check();
+  } catch (error) { updates.info = null; notice('settings-error', error); }
+  finally { button.disabled = false; renderUpdate(); }
+});
+$('update-notes').addEventListener('click', async () => {
+  notice('settings-error', null);
+  try {
+    const open = window.go?.main?.App?.OpenUpdatePage;
+    if (typeof open !== 'function') throw new Error('Esta ação não está disponível. Feche e abra o Dwnl novamente.');
+    await open();
+  } catch (error) { notice('settings-error', error); }
+});
+$('update-cancel').addEventListener('click', () => closeDialog($('update-dialog')));
+$('update-dialog').addEventListener('cancel', event => { if ($('update-confirm').disabled) event.preventDefault(); });
+$('update-confirm').addEventListener('click', async () => {
+  const confirm = $('update-confirm'), cancel = $('update-cancel');
+  confirm.disabled = cancel.disabled = true;
+  confirm.textContent = 'Baixando…';
+  notice('update-error', null);
+  try {
+    const install = window.go?.main?.App?.InstallUpdate;
+    if (typeof install !== 'function') throw new Error('Esta ação não está disponível. Feche e abra o Dwnl novamente.');
+    await install(updates.info.latest);
+    // The app closes now and the installer opens it again when it finishes.
+    state.exiting = true;
+    clearTimeout(state.pollTimer);
+    confirm.textContent = 'Abrindo o instalador…';
+  } catch (error) {
+    notice('update-error', error);
+    confirm.disabled = cancel.disabled = false;
+    confirm.textContent = 'Atualizar';
+  }
+});
 
 $('show-history-limit').addEventListener('click', async () => { await showView('history'); $('archive-history').focus(); });
 $('archive-history').addEventListener('click', () => {

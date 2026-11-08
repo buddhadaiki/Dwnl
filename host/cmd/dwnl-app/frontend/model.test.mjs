@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {Window} from 'happy-dom';
-import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, capability, choiceLabel, qualityName, newlyCompleted, newlyFinished, listLayout, clock, showExtensionCard, retryLabel} from './model.mjs';
+import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, capability, choiceLabel, qualityName, newlyCompleted, newlyFinished, listLayout, clock, showExtensionCard, retryLabel, updateView, downloadInProgress} from './model.mjs';
 
 test('quality selection treats a portrait Short as 1080p, without selecting 4K', () => {
   const choices = [
@@ -463,5 +463,58 @@ test('a link pasted while another is being analyzed is analyzed next', async () 
   } finally {
     window.dispatchEvent(new window.Event('beforeunload')); await window.happyDOM.abort();
     delete globalThis.document;delete globalThis.window;
+  }
+});
+
+test('the update row offers to install only a newer version this app can install', () => {
+  assert.deepEqual(updateView(null), {status:'Confira se há uma versão nova no GitHub.', action:'check', notes:false});
+  assert.deepEqual(updateView({current:'0.3.0', latest:'0.3.0', available:false}), {status:'Você está na versão mais recente (0.3.0).', action:'check', notes:false});
+  assert.deepEqual(updateView({current:'0.3.0', latest:'0.4.0', available:true, canInstall:true}), {status:'Dwnl 0.4.0 disponível.', action:'install', notes:true});
+  const blocked = updateView({current:'0.3.0', latest:'0.4.0', available:true, canInstall:false, blocked:'Atualização automática indisponível nesta execução de teste.'});
+  assert.equal(blocked.action, 'check');
+  assert.equal(blocked.status, 'Dwnl 0.4.0 disponível. Atualização automática indisponível nesta execução de teste.');
+  assert.equal(downloadInProgress({tasks:[{state:'queued'},{state:'completed'}]}), false);
+  assert.equal(downloadInProgress({tasks:[{state:'queued'},{state:'downloading'}]}), true);
+  assert.equal(downloadInProgress(undefined), false);
+});
+
+test('updating checks GitHub on click, warns about a running download and installs the found version', async () => {
+  const window = new Window({url:'http://localhost/',settings:{disableJavaScriptFileLoading:true,disableJavaScriptEvaluation:true}});
+  window.document.write(await readFile(new URL('./index.html',import.meta.url),'utf8'));
+  globalThis.window = window; globalThis.document = window.document;
+  const installed = [];
+  let checks = 0;
+  window.go = {main:{App:{
+    Call:async method => {
+      if (method === 'snapshot') return {version:'0.3.0',readiness:'ready',capabilities:{video:true,mp3:true,networkAccess:true},destination:{destinationId:'d'},tasks:[{id:'t',state:'downloading',title:'Clip'}]};
+      throw new Error('Unexpected method '+method);
+    },
+    CheckForUpdate:async () => { checks++; return {current:'0.3.0',latest:'0.4.0',available:true,canInstall:true,page:'https://github.com/buddhadaiki/Dwnl/releases/tag/v0.4.0'}; },
+    InstallUpdate:async version => { installed.push(version); },
+  }}};
+  const settle = async () => { for (let i=0;i<5;i++) await new Promise(resolve=>setTimeout(resolve,0)); };
+  try {
+    await import('./app.js?update='+Date.now()); await settle();
+    const $ = id => window.document.getElementById(id);
+    assert.equal(checks, 0, 'GitHub is not contacted before the click');
+    assert.equal($('update-button').textContent, 'Buscar atualizações');
+    $('update-button').click(); await settle();
+    assert.equal(checks, 1);
+    assert.equal($('update-status').textContent, 'Dwnl 0.4.0 disponível.');
+    assert.equal($('update-notes').hidden, false);
+    assert.equal($('update-button').textContent, 'Atualizar');
+    $('update-button').click(); await settle();
+    assert.equal(checks, 1, 'Atualizar does not check again');
+    assert.equal($('update-dialog').open, true);
+    assert.equal($('update-title').textContent, 'Atualizar para o Dwnl 0.4.0?');
+    assert.equal($('update-busy').hidden, false, 'the running download is mentioned');
+    assert.deepEqual(installed, []);
+    $('update-confirm').click(); await settle();
+    assert.deepEqual(installed, ['0.4.0']);
+    assert.equal($('update-confirm').disabled, true);
+    assert.equal($('update-confirm').textContent, 'Abrindo o instalador…');
+  } finally {
+    window.dispatchEvent(new window.Event('beforeunload')); await window.happyDOM.abort();
+    delete globalThis.document; delete globalThis.window;
   }
 });
