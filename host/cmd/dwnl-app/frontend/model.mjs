@@ -123,3 +123,15 @@ export function retryLabel(task) {
 export function showExtensionCard(snapshot, dismissed) {
   return Boolean(snapshot?.extension && !snapshot.extension.connected && !dismissed);
 }
+
+// What the Atualizações row shows after a check. Without a check it only offers one.
+export function updateView(info) {
+  if (!info) return {status: 'Confira se há uma versão nova no GitHub.', action: 'check', notes: false};
+  if (!info.available) return {status: `Você está na versão mais recente (${info.current}).`, action: 'check', notes: false};
+  if (info.canInstall) return {status: `Dwnl ${info.latest} disponível.`, action: 'install', notes: true};
+  return {status: `Dwnl ${info.latest} disponível. ${info.blocked ?? ''}`.trim(), action: 'check', notes: true};
+}
+
+export function downloadInProgress(snapshot) {
+  return (snapshot?.tasks ?? []).some(task => activeStates.has(task.state));
+}

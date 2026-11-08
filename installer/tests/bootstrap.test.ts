@@ -121,3 +121,18 @@ it('rejects a hash-valid archive containing traversal before extracting its sele
  const result=run(`$zip=[IO.Compression.ZipFile]::Open(${quote(archive)},[IO.Compression.ZipArchiveMode]::Create); try {$zip.CreateEntry('../escape.exe')|Out-Null; $entry=$zip.CreateEntry('fixture.exe'); $stream=$entry.Open(); try {$stream.Write([IO.File]::ReadAllBytes(${quote(join(f.root,'dist/helper/dwnl-host.exe'))}))} finally {$stream.Dispose()}} finally {$zip.Dispose()}; $supplier=[pscustomobject]@{name='fixture';version='test';archiveType='zip';sha256=Get-DwnlSha256 ${quote(archive)};sizeBytes=(Get-Item ${quote(archive)}).Length;files=@([pscustomobject]@{entry='fixture.exe';path='bin/fixture.exe';sha256=${quote(f.sha256)};sizeBytes=256})}; Import-DwnlSupplierArtifact -Artifact ${quote(archive)} -OutputRoot ${quote(output)} -Supplier $supplier`);
  expect(result.status).not.toBe(0);expect(result.stderr).toMatch(/Unsafe or duplicate supplier archive entry/);
 });
+it('asks a running Dwnl to quit before replacing or removing it, and reopens it after installing',()=>{
+ const script=readFileSync(join(project,'installer/bootstrap.iss'),'utf8');
+ expect(script).not.toContain('Close Dwnl jobs');
+ expect(script).toMatch(/^Filename: "\{app\}.Dwnl\.exe"; WorkingDir: "\{app\}"; Description: "Abrir o Dwnl"; Flags: postinstall nowait skipifdoesntexist\r?$/m);
+ expect(script).toContain("Params := '--quit';");
+ expect(script).toContain("if Force then Params := Params + ' --force';");
+ const prepare=script.slice(script.indexOf('function PrepareToInstall'),script.indexOf('procedure CurStepChanged'));
+ expect(prepare.match(/CloseRunningDwnl\('atualizar'\)/g)).toHaveLength(2);
+ expect(prepare).not.toContain('OwnedFilesInactive()');
+ expect(script.slice(script.indexOf('function InitializeUninstall'))).toContain("Result := CloseRunningDwnl('desinstalar');");
+ // A download in progress is closed only on the person's yes, and nothing is killed.
+ const close=script.slice(script.indexOf('function CloseRunningDwnl'),script.indexOf('procedure RequireHash'));
+ expect(close).toMatch(/AskDwnlToQuit\(False\) = 3[\s\S]*MB_YESNO, IDNO\) <> IDYES then Exit;\s*AskDwnlToQuit\(True\);/);
+ expect(script).not.toMatch(/taskkill|TerminateProcess/i);
+});

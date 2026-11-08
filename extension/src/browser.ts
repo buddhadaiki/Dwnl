@@ -6,7 +6,7 @@ export interface BrowserPort {
 }
 export interface BrowserAPI {
   runtime: {
-    id: string; lastError?: { message?: string }; getManifest(): { version: string; permissions?: string[] }; getURL(path: string): string;
+    id: string; lastError?: { message?: string }; getManifest(): { version: string; permissions?: string[] }; getURL(path: string): string; reload?(): void;
     connect(options: { name: string }): BrowserPort; connectNative(name: string): BrowserPort;
     onConnect: ListenerEvent<(port: BrowserPort) => void>;
   };

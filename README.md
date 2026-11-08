@@ -4,7 +4,7 @@
 
 Baixe vídeos e músicas do YouTube, Instagram, TikTok e X no Windows. Cole o link, escolha a qualidade em MP4 ou o MP3 e pronto. Uma extensão opcional do Chrome permite baixar direto da aba aberta.
 
-Tudo roda no seu computador: sem conta, sem servidor e sem telemetria.
+Tudo roda no seu computador: sem conta, sem servidor e sem telemetria. O Dwnl só fala com os sites dos links que você cola e, quando você pede, com o GitHub para buscar atualizações.
 
 ## Baixar
 
@@ -35,7 +35,7 @@ O instalador não tem assinatura digital, então o Windows pode mostrar um aviso
 
 ## Atualizar e remover
 
-Para atualizar, encerre o Dwnl com **Sair** e execute o instalador novo. Fila, histórico e preferências são mantidos. Se usa a extensão, clique em **Recarregar** no cartão do Dwnl em `chrome://extensions`.
+Para atualizar, abra **Configurações** e clique em **Buscar atualizações**. Se houver versão nova, **Atualizar** baixa o instalador, confere os hashes, fecha o Dwnl e abre ele de novo já atualizado. Rodar um instalador novo por cima também funciona: ele fecha o Dwnl sozinho e pergunta antes se houver um download em andamento. Fila, histórico e preferências são mantidos, e a extensão se recarrega sozinha.
 
 Para remover, desinstale o **Dwnl** em Configurações → Aplicativos do Windows e remova a extensão em `chrome://extensions`. Seus downloads continuam na pasta.
 

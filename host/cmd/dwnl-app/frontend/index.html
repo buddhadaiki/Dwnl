@@ -101,6 +101,7 @@
     <label class="setting-row"><span><strong>Iniciar com o Windows</strong><small>O Dwnl fica disponível na bandeja do sistema.</small></span><input id="start-at-login" type="checkbox" role="switch"></label>
     <div id="extension-setting" class="exit-setting" hidden><span><strong>Extensão do Chrome</strong><small id="extension-setting-status">Ainda não conectada.</small></span><button id="extension-setting-button" class="button" type="button">Conectar</button></div>
     <p id="settings-error" class="notice error" role="alert" hidden></p>
+    <div class="exit-setting"><span><strong>Atualizações</strong><small id="update-status">Confira se há uma versão nova no GitHub.</small><button id="update-notes" class="link-button" type="button" hidden>Ver novidades</button></span><button id="update-button" class="button" type="button">Buscar atualizações</button></div>
     <div class="exit-setting"><span><strong>Sair do Dwnl</strong><small>Fechar a janela mantém os downloads rodando. Ao sair, eles param e a fila fica guardada.</small></span><button id="exit-button" class="button" type="button">Sair</button></div>
     <details class="dependencies"><summary>Componentes de download</summary><ul id="dependency-list"></ul></details>
     <p id="version-label" class="hint version">Dwnl para Windows</p>
@@ -124,6 +125,14 @@
     <p id="archive-description" class="hint">Os registros de downloads concluídos, cancelados ou com falha saem desta lista. Os arquivos baixados continuam na pasta.</p>
     <p id="archive-error" class="notice error" role="alert" hidden></p>
     <div class="dialog-actions"><button id="archive-cancel" class="button" type="button" autofocus>Voltar</button><button id="archive-confirm" class="button primary" type="button">Limpar histórico</button></div>
+  </dialog>
+
+  <dialog id="update-dialog" aria-labelledby="update-title" aria-describedby="update-description">
+    <h2 id="update-title">Atualizar o Dwnl?</h2>
+    <p id="update-description" class="hint">O Dwnl baixa o instalador do GitHub, confere os hashes e fecha para a instalação começar. Depois ele abre de novo, com a fila e o histórico guardados.</p>
+    <p id="update-busy" class="notice" hidden>Um download está em andamento: ele para agora e volta para a fila.</p>
+    <p id="update-error" class="notice error" role="alert" hidden></p>
+    <div class="dialog-actions"><button id="update-cancel" class="button" type="button" autofocus>Voltar</button><button id="update-confirm" class="button primary" type="button">Atualizar</button></div>
   </dialog>
 
   <dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description">

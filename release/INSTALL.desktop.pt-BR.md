@@ -24,7 +24,11 @@ O setup não possui assinatura digital. Compare `SHA256SUMS.txt` antes de execut
 
 ## Atualizar e remover
 
-Encerre o Dwnl pelo comando Sair antes de atualizar. O instalador recusa substituir arquivos em uso; não mata processos. Ele atualiza o app e a extensão juntos, na mesma pasta; depois, clique em **Recarregar** no cartão do Dwnl em `chrome://extensions` ou reinicie o Chrome. Preserve uma cópia do diretório de estado antes de voltar à versão anterior.
+Para atualizar, abra **Configurações** e clique em **Buscar atualizações**. Se houver uma versão nova, **Atualizar** baixa o instalador do GitHub, confere os hashes e fecha o Dwnl; a instalação começa e, ao terminar, abre o Dwnl de novo. O Dwnl só consulta o GitHub quando você clica.
+
+Também dá para executar um instalador novo por cima. Se o Dwnl estiver aberto, o instalador pede que ele feche, como **Sair**, e pergunta antes quando há um download em andamento, que volta para a fila. Nenhum processo é encerrado à força. A versão 0.3.0 ainda não atende a esse pedido: feche-a pelo **Sair** quando o instalador avisar.
+
+O app e a extensão são atualizados juntos, na mesma pasta. A extensão se recarrega sozinha depois que o painel fecha; se ainda mostrar a versão anterior, clique em **Recarregar** no cartão do Dwnl em `chrome://extensions`. Preserve uma cópia do diretório de estado antes de voltar à versão anterior.
 
 Remova a extensão em `chrome://extensions` e desinstale **Dwnl** pelos aplicativos do Windows; a desinstalação apaga também a pasta da extensão. Downloads e estado do usuário são preservados. A entrada de início automático é removida somente se pertencer à mesma instalação.
 

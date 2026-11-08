@@ -35,6 +35,10 @@ WizardStyle=modern
 #ifdef DesktopApp
 [Icons]
 Name: "{autoprograms}\Dwnl"; Filename: "{app}\Dwnl.exe"; WorkingDir: "{app}"
+
+[Run]
+; Reopens Dwnl after an update, including one started from the app.
+Filename: "{app}\Dwnl.exe"; WorkingDir: "{app}"; Description: "Abrir o Dwnl"; Flags: postinstall nowait skipifdoesntexist
 #endif
 
 [Code]
@@ -76,6 +80,56 @@ begin
   Result := FilesInactiveFor(ExpandConstant('{app}'), Files);
 end;
 
+function WaitForOwnedFilesInactive(Seconds: Integer): Boolean;
+var Tries: Integer;
+begin
+  Result := OwnedFilesInactive();
+  Tries := Seconds * 4;
+  while not Result and (Tries > 0) do begin
+    Sleep(250);
+    Tries := Tries - 1;
+    Result := OwnedFilesInactive();
+  end;
+end;
+
+#ifdef DesktopApp
+// "Dwnl.exe --quit" asks a running Dwnl to quit as Sair does, saving its
+// queue, and waits for it: 0 closed or not running, 3 a download is in
+// progress (--force closes anyway), 4 a Dwnl too old to be asked.
+function AskDwnlToQuit(Force: Boolean): Integer;
+var Exe, Params: string;
+  Code: Integer;
+begin
+  Result := -1;
+  Exe := ExpandConstant('{app}\Dwnl.exe');
+  if IsReparsePath(Exe) or not FileExists(Exe) then Exit;
+  Params := '--quit';
+  if Force then Params := Params + ' --force';
+  if Exec(Exe, Params, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, Code) then Result := Code;
+end;
+#endif
+
+// Closes a running Dwnl before its files are replaced or removed. No process
+// is terminated: Dwnl is asked to quit and exits on its own.
+function CloseRunningDwnl(Action: string): Boolean;
+begin
+  Result := OwnedFilesInactive();
+  if Result then Exit;
+#ifdef DesktopApp
+  // An update started from the app is already closing it.
+  if WaitForOwnedFilesInactive(3) then begin Result := True; Exit; end;
+  if AskDwnlToQuit(False) = 3 then begin
+    if SuppressibleMsgBox('Um download está em andamento no Dwnl. Fechar o Dwnl agora para ' + Action + '? O download para e volta para a fila.',
+      mbConfirmation, MB_YESNO, IDNO) <> IDYES then Exit;
+    AskDwnlToQuit(True);
+  end;
+#endif
+  repeat
+    if WaitForOwnedFilesInactive(15) then begin Result := True; Exit; end;
+  until SuppressibleMsgBox('O Dwnl ainda está aberto. Use Sair no ícone do Dwnl na bandeja e feche o painel da extensão no Chrome. Depois clique em Repetir.',
+    mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY;
+end;
+
 procedure RequireHash(Path, Expected: string);
 begin
   if IsReparsePath(Path) or not FileExists(Path) or (CompareText(GetSHA256OfFile(Path), Expected) <> 0) then
@@ -109,8 +163,8 @@ begin
   Result := InstallationProblem(ExpandConstant('{app}'), ExpandConstant('{localappdata}\Dwnl'),
     RegValueExists(HKCU, NativeKey, ''), Registered);
   if Result <> '' then Exit;
-  if not OwnedFilesInactive() then begin
-    Result := 'Close Dwnl jobs before updating. No process was terminated.'; Exit;
+  if not CloseRunningDwnl('atualizar') then begin
+    Result := 'O Dwnl continua aberto, então nada foi alterado. Feche-o pelo Sair e execute o instalador de novo.'; Exit;
   end;
   WasOwnedInstallation := OwnedManifest();
   NativeKeyExisted := RegKeyExists(HKCU, NativeKey);
@@ -119,8 +173,8 @@ begin
     // All download/hash/extraction failures occur before the install step.
     Registered := '';
     RegQueryStringValue(HKCU, NativeKey, '', Registered);
-    if not OwnedFilesInactive() then begin
-      Result := 'Close Dwnl jobs before updating. No process was terminated.'; Exit;
+    if not CloseRunningDwnl('atualizar') then begin
+      Result := 'O Dwnl continua aberto, então nada foi alterado. Feche-o pelo Sair e execute o instalador de novo.'; Exit;
     end;
     Result := PrepareOwnedDirectory(ExpandConstant('{app}'), ExpandConstant('{localappdata}\Dwnl'),
       RegValueExists(HKCU, NativeKey, ''), Registered);
@@ -153,8 +207,8 @@ end;
 
 function InitializeUninstall(): Boolean;
 begin
-  Result := OwnedFilesInactive();
-  if not Result then MsgBox('Close Dwnl jobs before uninstalling. No process was terminated.', mbError, MB_OK);
+  Result := CloseRunningDwnl('desinstalar');
+  if not Result then MsgBox('O Dwnl continua aberto, então nada foi removido. Feche-o pelo Sair e desinstale de novo.', mbError, MB_OK);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

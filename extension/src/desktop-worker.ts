@@ -1,10 +1,19 @@
 import { browserAPI, type BrowserAPI } from './browser.js';
 import { DESKTOP_PORT, desktopRequest, nativeDesktopClient, DesktopError } from './desktop-client.js';
+import { pendingReload } from './installed-version.js';
 
-export function registerDesktopWorker(browser: BrowserAPI): void {
+export function registerDesktopWorker(browser: BrowserAPI, readManifest?: (url: string) => Promise<string>): void {
   const native = nativeDesktopClient(name => browser.runtime.connectNative(name), () => browser.runtime.lastError?.message);
   let panels = 0;
-  const release = () => { if (panels === 0 && !native.busy) native.disconnect(); };
+  // After an update the reload waits until no panel is open and no request is in flight.
+  let reload: (() => Promise<void>) | undefined;
+  const release = () => {
+    if (panels !== 0 || native.busy) return;
+    native.disconnect();
+    const run = reload; reload = undefined;
+    if (run) void run();
+  };
+  void pendingReload(browser, readManifest).then(found => { reload = found; release(); });
   browser.runtime.onConnect.addListener(port => {
     if (port.name !== DESKTOP_PORT || port.sender?.id !== browser.runtime.id || port.sender.url !== browser.runtime.getURL('desktop-popup.html')) { port.disconnect(); return; }
     panels++;
