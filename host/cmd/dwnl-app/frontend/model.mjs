@@ -120,8 +120,19 @@ export function retryLabel(task) {
 }
 
 // The setup ships the extension; the app reports it only when it is installed.
+// The card nudges only someone whose extension never reached the app.
 export function showExtensionCard(snapshot, dismissed) {
-  return Boolean(snapshot?.extension && !snapshot.extension.connected && !dismissed);
+  const extension = snapshot?.extension;
+  return Boolean(extension && !extension.connected && !extension.lastSeen && !dismissed);
+}
+
+// "connected" is a contact in this run of the app. An earlier contact is only
+// dated: the extension may have been removed from Chrome since.
+export function extensionView(extension) {
+  if (extension?.connected) return {setting:'Conectada.', button:'Ver passos', wait:'Extensão conectada. Já pode baixar pelo Chrome.', connected:true};
+  const seen = extension?.lastSeen ? new Date(extension.lastSeen) : null;
+  const setting = seen && !Number.isNaN(seen.getTime()) ? `Última conexão em ${seen.toLocaleDateString('pt-BR')}.` : 'Ainda não conectada.';
+  return {setting, button:'Conectar', wait:'Aguardando a extensão… Ao terminar, clique no ícone do Dwnl no Chrome.', connected:false};
 }
 
 // What the Atualizações row shows after a check. Without a check it only offers one.

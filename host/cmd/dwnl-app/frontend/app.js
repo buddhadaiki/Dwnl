@@ -1,4 +1,4 @@
-import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyFinished, listLayout, appendChoices, isVideoURL, pollDelay, capability, showExtensionCard, retryLabel, updateView, downloadInProgress} from './model.mjs';
+import {activeStates, terminalStates, stateLabels, recentLimit, defaultChoice, choiceLabel, bytes, clock, progressPercent, errorMessage, partitionTasks, newlyFinished, listLayout, appendChoices, isVideoURL, pollDelay, capability, showExtensionCard, extensionView, retryLabel, updateView, downloadInProgress} from './model.mjs';
 
 const $ = id => document.getElementById(id);
 const state = {snapshot:null, analysis:null, item:null, view:'queue', analyzing:false, enqueuing:false, loadingFormats:false, requestId:null, requestKey:null, failures:0, pollTimer:null, refreshing:false, selectionVersion:0, exiting:false, archiving:false, seen:null, toastTask:null, toastTimer:null, pastedWhileAnalyzing:false, analyzeWhenReady:false, retryMode:null, extensionDismissed:false, copyTimer:null, removeId:null, removing:false, renameId:null, renaming:false, layout:null, finishing:new Set(), transition:null, landing:null};
@@ -108,10 +108,11 @@ function renderExtension() {
     folder.dataset.path = extension.folder;
     folder.replaceChildren(...extension.folder.split(/(?<=\\)/).flatMap((part, index) => index ? [document.createElement('wbr'), part] : [part]));
   }
-  $('extension-setting-status').textContent = extension.connected ? 'Conectada.' : 'Ainda não conectada.';
-  $('extension-setting-button').textContent = extension.connected ? 'Ver passos' : 'Conectar';
-  $('extension-wait').textContent = extension.connected ? 'Extensão conectada. Já pode baixar pelo Chrome.' : 'Aguardando a extensão…';
-  $('extension-wait').classList.toggle('connected', Boolean(extension.connected));
+  const view = extensionView(extension);
+  $('extension-setting-status').textContent = view.setting;
+  $('extension-setting-button').textContent = view.button;
+  $('extension-wait').textContent = view.wait;
+  $('extension-wait').classList.toggle('connected', view.connected);
 }
 
 function openExtensionSteps() {

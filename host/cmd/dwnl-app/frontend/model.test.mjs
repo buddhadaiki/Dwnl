@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {Window} from 'happy-dom';
-import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, capability, choiceLabel, qualityName, newlyCompleted, newlyFinished, listLayout, clock, showExtensionCard, retryLabel, updateView, downloadInProgress} from './model.mjs';
+import {defaultChoice, qualityPixels, progressPercent, appendChoices, partitionTasks, isVideoURL, pollDelay, capability, choiceLabel, qualityName, newlyCompleted, newlyFinished, listLayout, clock, showExtensionCard, extensionView, retryLabel, updateView, downloadInProgress} from './model.mjs';
 
 test('quality selection treats a portrait Short as 1080p, without selecting 4K', () => {
   const choices = [
@@ -66,13 +66,25 @@ test('capabilities are provisional while the app prepares', () => {
   assert.equal(capability(null,'video'),false);
 });
 
-test('the Chrome card appears only for an installed, unconnected, undismissed extension', () => {
+test('the Chrome card appears only for an installed extension that never connected, until dismissed', () => {
   const extension = {folder:'C:\\Dwnl\\extension',connected:false};
   assert.equal(showExtensionCard({extension},false),true);
   assert.equal(showExtensionCard({extension},true),false);
   assert.equal(showExtensionCard({extension:{...extension,connected:true}},false),false);
+  assert.equal(showExtensionCard({extension:{...extension,lastSeen:'2026-11-05T19:58:06Z'}},false),false);
   assert.equal(showExtensionCard({},false),false);
   assert.equal(showExtensionCard(null,false),false);
+});
+
+test('only a contact in this run reads as connected; an earlier one is dated', () => {
+  assert.deepEqual(extensionView({connected:true,lastSeen:'2026-11-08T03:00:00Z'}), {setting:'Conectada.', button:'Ver passos', wait:'Extensão conectada. Já pode baixar pelo Chrome.', connected:true});
+  const earlier = extensionView({connected:false,lastSeen:'2026-11-05T19:58:06Z'});
+  assert.equal(earlier.setting, `Última conexão em ${new Date('2026-11-05T19:58:06Z').toLocaleDateString('pt-BR')}.`);
+  assert.equal(earlier.connected, false);
+  assert.equal(earlier.button, 'Conectar');
+  assert.match(earlier.wait, /^Aguardando a extensão/);
+  assert.equal(extensionView({connected:false}).setting, 'Ainda não conectada.');
+  assert.equal(extensionView({connected:false,lastSeen:'not a date'}).setting, 'Ainda não conectada.');
 });
 
 test('quality labels name the resolution and size, never codecs or containers', () => {
